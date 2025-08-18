@@ -1,0 +1,281 @@
+const { sendEmail } = require("./emailService");
+
+const generateFormLink = (name, empId) => {
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_details`;
+
+  const now = new Date();
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0);
+  const expires = encodeURIComponent(endOfMonth.toISOString());
+
+  const params = new URLSearchParams({
+    name: name,
+    emp_id: empId,
+    expires: expires,
+    ts: Date.now().toString()
+  });
+
+  return { formUrl: `${baseUrl}?${params.toString()}`, expires };
+};
+
+const generateFormLinkforRemarks = (name, empId, res_id) => {
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks`;
+
+  // Get current IST time
+  const nowUTC = new Date();
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const nowIST = new Date(nowUTC.getTime() + IST_OFFSET);
+
+  // Add 5 days
+  const expiresDate = new Date(nowIST);
+  expiresDate.setDate(expiresDate.getDate() + 4);
+
+  // Set to 00:00:00 time
+  expiresDate.setHours(0, 0, 0, 0);
+
+  const expires = encodeURIComponent(expiresDate.toISOString());
+
+  const params = new URLSearchParams({
+    res_id: res_id,
+    name: name,
+    emp_id: empId,
+    expires: expires,
+    ts: Date.now().toString()
+  });
+
+  return {
+    formUrl: `${baseUrl}?${params.toString()}`,
+    expires
+  };
+};
+const generateFormOtherLinkforRemarks = (name, empId, res_id) => {
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks`;
+
+  // Get current IST time
+  const nowUTC = new Date();
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const nowIST = new Date(nowUTC.getTime() + IST_OFFSET);
+
+  // Add 5 days
+  const expiresDate = new Date(nowIST);
+  expiresDate.setDate(expiresDate.getDate() + 2);
+
+  // Set to 00:00:00 time
+  expiresDate.setHours(0, 0, 0, 0);
+
+  const expires = encodeURIComponent(expiresDate.toISOString());
+
+  const params = new URLSearchParams({
+    res_id: res_id,
+    name: name,
+    emp_id: empId,
+    expires: expires,
+    ts: Date.now().toString()
+  });
+
+  return {
+    formUrl: `${baseUrl}?${params.toString()}`,
+    expires
+  };
+};
+
+const sendQuaterlyMail = async (name, email, hrId) => {
+  console.log(name, email, hrId);
+
+  const { formUrl, expires } = generateFormLink(name, hrId);
+
+  // Convert to human-readable IST
+  const readableExpiry = new Date(decodeURIComponent(expires)).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const htmlBody = `
+    <p>Dear ${name},</p>
+    <p>Please fill out your Travelling Report for this Quarter by clicking the link below:</p>
+    <p><a href="${formUrl}">Click here to open the form</a></p>
+    <p><strong>Note:</strong> This form will expire on <strong>${readableExpiry} IST</strong>.</p>
+  `;
+
+  const emailData = {
+    to: email,
+    subject: `Quarterly Form Submission`,
+    htmlBody: htmlBody
+  };
+
+  await sendEmail(emailData);
+};
+
+const sendTenReminderMail = async (empName, email, fromDate, destination) => {
+  const cc = `dme-5@amrit.co.in`;
+  const subject = `Travel Reminder: Upcoming Trip to ${destination}`;
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; color: #333;">
+      <p>Dear <strong>${empName}</strong>,</p>
+      <p>This is a gentle reminder that you have a scheduled travel plan in <strong>10 days</strong>.</p>
+
+      <table style="border-collapse: collapse; margin-top: 10px;">
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;"><strong>Destination</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${destination}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;"><strong>Travel Date</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${new Date(fromDate).toLocaleDateString('en-IN')}</td>
+        </tr>
+      </table>
+
+      <p>Please make necessary preparations for your journey.</p>
+
+      <p>Best regards,<br/>Travel Tracker System</p>
+    </div>
+  `;
+
+  await sendEmail({
+    to: email,
+    cc: cc,
+    subject: subject,
+    htmlBody: htmlBody
+  });
+};
+
+const sendSixReminderMail = async (empName, email, fromDate, destination) => {
+  const cc = `dme-5@amrit.co.in`;
+  const subject = `Travel Reminder: Upcoming Trip to ${destination}`;
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; color: #333;">
+      <p>Dear <strong>${empName}</strong>,</p>
+      <p>This is a gentle reminder that you have a scheduled travel plan in <strong>10 days</strong>.</p>
+
+      <table style="border-collapse: collapse; margin-top: 10px;">
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;"><strong>Destination</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${destination}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;"><strong>Travel Date</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${new Date(fromDate).toLocaleDateString('en-IN')}</td>
+        </tr>
+      </table>
+
+      <p>Please make necessary preparations for your journey.</p>
+
+      <p>Best regards,<br/>Travel Tracker System</p>
+    </div>
+  `;
+
+  await sendEmail({
+    to: email,
+    cc: cc,
+    subject: subject,
+    htmlBody: htmlBody
+  });
+};
+
+const sendTwoReminderMail = async (empName, email, fromDate, destination) => {
+  const cc = `dme-5@amrit.co.in`;
+  const subject = `Travel Reminder: Upcoming Trip to ${destination}`;
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; color: #333;">
+      <p>Dear <strong>${empName}</strong>,</p>
+      <p>This is a gentle reminder that you have a scheduled travel plan in <strong>10 days</strong>.</p>
+
+      <table style="border-collapse: collapse; margin-top: 10px;">
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;"><strong>Destination</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${destination}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;"><strong>Travel Date</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${new Date(fromDate).toLocaleDateString('en-IN')}</td>
+        </tr>
+      </table>
+
+      <p>Please make necessary preparations for your journey.</p>
+
+      <p>Best regards,<br/>Travel Tracker System</p>
+    </div>
+  `;
+
+  await sendEmail({
+    to: email,
+    cc: cc,
+    subject: subject,
+    htmlBody: htmlBody
+  });
+};
+
+const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => {
+  const { formUrl, expires } = generateFormLinkforRemarks(name, hr_mantra_id, res_id);
+
+  // Format from_date as MM/dd/yyyy
+  const visitDate = new Date(from_date);
+  const formattedVisitDate = `${(visitDate.getMonth() + 1).toString().padStart(2, '0')}/${visitDate.getDate().toString().padStart(2, '0')}/${visitDate.getFullYear()}`;
+
+  // Format expires date as MM/dd/yyyy
+  const expiresDate = new Date(decodeURIComponent(expires));
+  const formattedExpiresDate = `${(expiresDate.getMonth() + 1).toString().padStart(2, '0')}/${expiresDate.getDate().toString().padStart(2, '0')}/${expiresDate.getFullYear()}`;
+
+  const subject = `Submit Your Travel Remarks for Visit on ${formattedVisitDate}`;
+
+  const htmlBody = `
+    <p>Dear ${name},</p>
+    <p>Please submit your travel remarks for the visit that began on <strong>${formattedVisitDate}</strong>.</p>
+    <p>Click the link below to fill out the travel remarks form:</p>
+    <p><a href="${formUrl}" target="_blank">Submit Travel Remarks</a></p>
+    <p><strong>Note:</strong> This link will expire on <strong>${formattedExpiresDate}</strong>.</p>
+    <br/>
+    <p>Regards,<br/>Travel Tracker System</p>
+  `;
+
+  try {
+    await sendEmail({
+      to: email,
+      subject,
+      htmlBody
+    });
+    console.log(`First remarks email sent to ${name} (${email})`);
+  } catch (err) {
+    console.error(`Failed to send first remarks email to ${email}:`, err);
+  }
+};
+
+const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => { 
+  const { formUrl, expires } = generateFormOtherLinkforRemarks(name, hr_mantra_id, res_id);
+
+    // Format from_date as MM/dd/yyyy
+  const visitDate = new Date(from_date);
+  const formattedVisitDate = `${(visitDate.getMonth() + 1).toString().padStart(2, '0')}/${visitDate.getDate().toString().padStart(2, '0')}/${visitDate.getFullYear()}`;
+
+  // Format expires date as MM/dd/yyyy
+  const expiresDate = new Date(decodeURIComponent(expires));
+  const formattedExpiresDate = `${(expiresDate.getMonth() + 1).toString().padStart(2, '0')}/${expiresDate.getDate().toString().padStart(2, '0')}/${expiresDate.getFullYear()}`;
+
+  const subject = `Reminder: Submit Your Travel Remarks for Visit on ${formattedVisitDate}`;
+
+  const htmlBody = `
+    <p>Dear ${name},</p>
+    <p>This is a gentle reminder to submit your travel remarks for the visit that began on <strong>${formattedVisitDate}</strong>.</p>
+    <p>Please click the link below to complete the travel remarks form:</p>
+    <p><a href="${formUrl}" target="_blank">Submit Travel Remarks</a></p>
+    <p><strong>Note:</strong> This link will expire on <strong>${formattedExpiresDate}</strong>.</p>
+    <br/>
+    <p>Regards,<br/>Travel Tracker System</p>
+  `;
+
+  try {
+    await sendEmail({
+      to: email,
+      subject,
+      htmlBody
+    });
+    console.log(`Reminder email sent to ${name} (${email})`);
+  } catch (err) {
+    console.error(`Failed to send reminder email to ${email}:`, err);
+  }
+};
+
+module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail };

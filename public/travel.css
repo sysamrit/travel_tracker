@@ -1,0 +1,36 @@
+body {
+  background-color: white;
+  color: black;
+}
+
+.form-heading {
+  font-weight: bold;
+}
+
+.loading-indicator {
+    display: none;
+    /* Initially hidden */
+    width: 55px;
+    height: 55px;
+    border: 6px solid rgba(0, 0, 0, 0.2);
+    border-top: 4px solid rgba(250, 0, 0);
+    /* Change this to your desired color */
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    /* A simple spin animation */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Keyframes for the spin animation */
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+
+    100% {
+      transform: rotate(360deg);
+    }
+  }
