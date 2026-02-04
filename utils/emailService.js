@@ -37,6 +37,7 @@ const transporter = nodemailer.createTransport({
  */
 const sendEmail = async ({ to, subject, htmlBody, cc = '', bcc = '' }) => {
   try {
+    console.log(to);
     const mailOptions = {
       from: process.env.EMAIL,
       to,

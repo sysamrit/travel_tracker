@@ -22,151 +22,326 @@ const getEmpList = async () => {
 
 const setTravelDetails = async (req, res) => {
   try {
-    const { hr_mantra_id, dept, travel_details } = req.body;
+    let { hr_mantra_id, dept, travelDetails } = req.body;
 
-    const insertQuery = `INSERT INTO tbl_travel_response (hr_mantra_id, department, from_date, to_date, destination) VALUES ($1, $2, $3, $4, $5)`;
+    const insertTravelQuery = `
+      INSERT INTO tbl_travel_response
+      (hr_mantra_id, department, from_date, to_date, destination, coperson_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING res_id, to_date
+    `;
 
-    const insertPromises = travel_details.map(detail => {
-      const { to_date, from_date, destination } = detail;
-      return db.query(insertQuery, [hr_mantra_id,dept,from_date,to_date,destination]);
-    });
+    const insertCoPersonQuery = `
+      INSERT INTO tbl_travel_coperson
+      (res_id, coperson_id, after_visit_24hr, after_visit_48hr)
+      VALUES ($1, $2, $3, $4)
+    `;
 
-    await Promise.all(insertPromises);
+    for (const detail of travelDetails) {
+      const {
+        fromDate,
+        toDate,
+        destination,
+        coperson
+      } = detail;
+
+      // Convert co-person array → comma-separated string or NULL
+      const coPersonValue =
+        Array.isArray(coperson) && coperson.length > 0
+          ? coperson.join(',')
+          : null;
+
+      // Insert travel record
+      const travelResult = await db.query(insertTravelQuery, [
+        hr_mantra_id,
+        dept,
+        fromDate,
+        toDate,
+        destination,
+        coPersonValue
+      ]);
+
+      const { res_id } = travelResult.rows[0];
+
+      // Calculate follow-up dates
+      const baseDate = new Date(toDate);
+
+      const afterVisit24hr = new Date(baseDate);
+      afterVisit24hr.setDate(afterVisit24hr.getDate() + 1);
+
+      const afterVisit48hr = new Date(baseDate);
+      afterVisit48hr.setDate(afterVisit48hr.getDate() + 3);
+
+      // Insert co-person rows
+      if (Array.isArray(coperson) && coperson.length > 0) {
+        await Promise.all(
+          coperson.map(coperson_id =>
+            db.query(insertCoPersonQuery, [
+              res_id,
+              coperson_id,
+              afterVisit24hr,
+              afterVisit48hr
+            ])
+          )
+        );
+      }
+    }
 
     return res.status(200).json({
-      status: 200, message: "Travel details inserted successfully."
+      status: 200,
+      message: "Travel details and co-persons inserted successfully"
     });
+
   } catch (error) {
     console.error("Error processing data:", error);
-    return res.status(500).json({status: 500, message: "Internal Server Error"});
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error"
+    });
   }
 };
 
 const sendTenDaysReminder = async () => {
   try {
-    const travelQuery = `SELECT hr_mantra_id, from_date, destination FROM tbl_travel_response WHERE ten_prior_mail = CURRENT_DATE;`;
+    const travelQuery = `
+      SELECT res_id, hr_mantra_id, from_date, destination, coperson_id
+      FROM tbl_travel_response
+      WHERE ten_prior_mail = CURRENT_DATE
+    `;
 
     const travelResult = await db.query(travelQuery);
 
-    if (!travelResult || !travelResult.rows || travelResult.rows.length === 0) {
+    if (!travelResult?.rows?.length) {
       console.log("No travel reminders to send today.");
       return;
     }
 
-    // Step 2: Loop through each travel record
     for (const travelRow of travelResult.rows) {
-      // Get employee details
-      const empQuery = `SELECT name, email FROM tbl_emp WHERE hr_mantra_id = $1
+
+      /* -------- EMPLOYEE DETAILS -------- */
+      const empQuery = `
+        SELECT name, email
+        FROM tbl_emp
+        WHERE hr_mantra_id = $1
       `;
       const empResult = await db.query(empQuery, [travelRow.hr_mantra_id]);
 
-      if (!empResult || !empResult.rows || empResult.rows.length === 0) {
-        console.warn(`No employee found for HR Mantra ID: ${travelRow.hr_mantra_id}`);
-        continue;
-      }
-
-      // Get destination name
-      const destQuery = `SELECT area_name FROM tbl_area WHERE area_code = $1`;
-      const destResult = await db.query(destQuery, [travelRow.destination]);
-
-      if (!destResult || !destResult.rows || destResult.rows.length === 0) {
-        console.warn(`No destination found for area_code: ${travelRow.destination}`);
-        continue;
-      }
+      if (!empResult?.rows?.length) continue;
 
       const empData = empResult.rows[0];
+
+      /* -------- DESTINATION -------- */
+      const destQuery = `
+        SELECT area_name
+        FROM tbl_area
+        WHERE area_code = $1
+      `;
+      const destResult = await db.query(destQuery, [travelRow.destination]);
+
+      if (!destResult?.rows?.length) continue;
+
       const destinationName = destResult.rows[0].area_name;
-      sendTenReminderMail(empData.name, empData.email, travelRow.from_date, destinationName);
+
+      /* -------- CO-PERSON EMAILS -------- */
+      let ccEmails = [];
+
+      if (travelRow.coperson_id) {
+        // "100001,100002" → ["100001","100002"]
+        const copersonIds = travelRow.coperson_id
+          .split(',')
+          .map(id => id.trim())
+          .filter(Boolean);
+
+        if (copersonIds.length > 0) {
+          const copersonEmailQuery = `
+            SELECT coperson_email
+            FROM tbl_coperson
+            WHERE coperson_id = ANY($1::int[])
+          `;
+
+          const emailResult = await db.query(copersonEmailQuery, [copersonIds]);
+          ccEmails = emailResult.rows.map(r => r.coperson_email);
+        }
+      }
+
+      /* -------- SEND MAIL -------- */
+      sendTenReminderMail(
+        empData.name,
+        empData.email,
+        travelRow.from_date,
+        destinationName,
+        ccEmails
+      );
     }
+
   } catch (err) {
     console.error("Error processing data:", err);
   }
 };
 
-
 const sendSixDaysReminder = async () => {
-  try{
-    const travelQuery = `SELECT hr_mantra_id, from_date, destination FROM tbl_travel_response WHERE six_prior_mail = CURRENT_DATE;`;
+  try {
+    const travelQuery = `
+      SELECT hr_mantra_id, from_date, destination, coperson_id
+      FROM tbl_travel_response
+      WHERE six_prior_mail = CURRENT_DATE
+    `;
+
     const travelResult = await db.query(travelQuery);
 
-    if (!travelResult || !travelResult.rows || travelResult.rows.length === 0) {
+    if (!travelResult?.rows?.length) {
       console.log("No travel reminders to send today.");
       return;
     }
 
-    // Step 2: Loop through each travel record
     for (const travelRow of travelResult.rows) {
-      // Get employee details
-      const empQuery = `SELECT name, email FROM tbl_emp WHERE hr_mantra_id = $1
+      /* =====================
+         EMPLOYEE
+      ===================== */
+      const empQuery = `
+        SELECT name, email
+        FROM tbl_emp
+        WHERE hr_mantra_id = $1
       `;
       const empResult = await db.query(empQuery, [travelRow.hr_mantra_id]);
 
-      if (!empResult || !empResult.rows || empResult.rows.length === 0) {
-        console.warn(`No employee found for HR Mantra ID: ${travelRow.hr_mantra_id}`);
-        continue;
-      }
+      if (!empResult.rows.length) continue;
 
-      // Get destination name
-      const destQuery = `SELECT area_name FROM tbl_area WHERE area_code = $1`;
+      /* =====================
+         DESTINATION
+      ===================== */
+      const destQuery = `
+        SELECT area_name
+        FROM tbl_area
+        WHERE area_code = $1
+      `;
       const destResult = await db.query(destQuery, [travelRow.destination]);
 
-      if (!destResult || !destResult.rows || destResult.rows.length === 0) {
-        console.warn(`No destination found for area_code: ${travelRow.destination}`);
-        continue;
+      if (!destResult.rows.length) continue;
+
+      /* =====================
+         CO-PERSON CC EMAILS
+      ===================== */
+      let ccEmails = [];
+
+      if (travelRow.coperson_id) {
+        const copersonIds = travelRow.coperson_id
+          .split(',')
+          .map(id => id.trim())
+          .filter(Boolean);
+
+        if (copersonIds.length) {
+          const copersonQuery = `
+            SELECT email
+            FROM tbl_coperson
+            WHERE coperson_id = ANY($1::int[])
+          `;
+
+          const copersonResult = await db.query(copersonQuery, [copersonIds]);
+          ccEmails = copersonResult.rows.map(r => r.email);
+        }
       }
 
+      /* =====================
+         SEND MAIL
+      ===================== */
       const empData = empResult.rows[0];
       const destinationName = destResult.rows[0].area_name;
-      sendSixReminderMail(empData.name, empData.email, travelRow.from_date, destinationName);
+
+      await sendSixReminderMail(
+        empData.name,
+        empData.email,
+        travelRow.from_date,
+        destinationName,
+        ccEmails
+      );
     }
   } catch (err) {
     console.error("Error processing data:", err);
   }
-}
+};
 
 const sendTwoDaysReminder = async () => {
   try {
-    // Step 1: Get basic travel details
-    const travelQuery = `SELECT hr_mantra_id, from_date, destination FROM tbl_travel_response WHERE two_prior_mail = CURRENT_DATE;`;
+    const travelQuery = `
+      SELECT hr_mantra_id, from_date, destination, coperson_id
+      FROM tbl_travel_response
+      WHERE two_prior_mail = CURRENT_DATE
+    `;
+
     const travelResult = await db.query(travelQuery);
 
-    if (!travelResult || !travelResult.rows || travelResult.rows.length === 0) {
+    if (!travelResult?.rows?.length) {
       console.log("No travel reminders to send today.");
       return;
     }
 
-    // Step 2: Loop through each travel record
     for (const travelRow of travelResult.rows) {
-      // Get employee details
-      const empQuery = `SELECT name, email FROM tbl_emp WHERE hr_mantra_id = $1
+      /* =====================
+         EMPLOYEE
+      ===================== */
+      const empQuery = `
+        SELECT name, email
+        FROM tbl_emp
+        WHERE hr_mantra_id = $1
       `;
       const empResult = await db.query(empQuery, [travelRow.hr_mantra_id]);
 
-      if (!empResult || !empResult.rows || empResult.rows.length === 0) {
-        console.warn(`No employee found for HR Mantra ID: ${travelRow.hr_mantra_id}`);
-        continue;
-      }
+      if (!empResult.rows.length) continue;
 
-      // Get destination name
-      const destQuery = `SELECT area_name FROM tbl_area WHERE area_code = $1`;
+      /* =====================
+         DESTINATION
+      ===================== */
+      const destQuery = `
+        SELECT area_name
+        FROM tbl_area
+        WHERE area_code = $1
+      `;
       const destResult = await db.query(destQuery, [travelRow.destination]);
 
-      if (!destResult || !destResult.rows || destResult.rows.length === 0) {
-        console.warn(`No destination found for area_code: ${travelRow.destination}`);
-        continue;
+      if (!destResult.rows.length) continue;
+
+      /* =====================
+         CO-PERSON CC EMAILS
+      ===================== */
+      let ccEmails = [];
+
+      if (travelRow.coperson_id) {
+        const copersonIds = travelRow.coperson_id
+          .split(',')
+          .map(id => id.trim())
+          .filter(Boolean);
+
+        if (copersonIds.length) {
+          const copersonQuery = `
+            SELECT email
+            FROM tbl_coperson
+            WHERE coperson_id = ANY($1::int[])
+          `;
+
+          const copersonResult = await db.query(copersonQuery, [copersonIds]);
+          ccEmails = copersonResult.rows.map(r => r.email);
+        }
       }
 
+      /* =====================
+         SEND MAIL
+      ===================== */
       const empData = empResult.rows[0];
       const destinationName = destResult.rows[0].area_name;
 
-      // Step 3: Send email
-      await sendTwoReminderMail(empData.name, empData.email, travelRow.from_date, destinationName);
+      await sendTwoReminderMail(
+        empData.name,
+        empData.email,
+        travelRow.from_date,
+        destinationName,
+        ccEmails
+      );
     }
   } catch (err) {
     console.error("Error processing data:", err);
   }
 };
-
 
 const sendFirstRemarks = async () => {
   try {
@@ -197,6 +372,121 @@ const sendFirstRemarks = async () => {
   }
 };
 
+const sendCoFirstRemarks = async () => {
+  try {
+    const coPersonQuery = `
+      SELECT travel_co_id, coperson_id, res_id
+      FROM tbl_travel_coperson
+      WHERE after_visit_24hr = CURRENT_DATE
+    `;
+    const coPersonResult = await db.query(coPersonQuery);
+
+    if (!coPersonResult?.rows?.length) {
+      console.log("No co-person reminders to send today.");
+      return;
+    }
+
+    for (const coRow of coPersonResult.rows) {
+
+      const travelQuery = `
+        SELECT res_id, from_date
+        FROM tbl_travel_response
+        WHERE res_id = $1
+      `;
+      const travelResult = await db.query(travelQuery, [coRow.res_id]);
+
+      if (!travelResult?.rows?.length) {
+        console.warn(`No travel found for res_id: ${coRow.res_id}`);
+        continue;
+      }
+
+      const travelData = travelResult.rows[0];
+
+      const coEmpQuery = `
+        SELECT coperson_name, coperson_email, hr_mantra_id
+        FROM tbl_coperson
+        WHERE coperson_id = $1
+      `;
+      const coEmpResult = await db.query(coEmpQuery, [coRow.coperson_id]);
+
+      if (!coEmpResult?.rows?.length) {
+        console.warn(`No co-person found for ID: ${coRow.coperson_id}`);
+        continue;
+      }
+
+      const coPerson = coEmpResult.rows[0];
+
+      // ✅ CORRECT VALUES
+      await sendFirstRemarksMail(
+        coPerson.coperson_name,
+        coPerson.coperson_email,
+        travelData.from_date,
+        coPerson.hr_mantra_id,
+        coRow.travel_co_id   // ✅ THIS is what you wanted
+      );
+    }
+  } catch (err) {
+    console.error("Error processing co-person reminders:", err);
+  }
+};
+
+const sendCoSecondRemarks = async () => {
+  try {
+    const coPersonQuery = `
+      SELECT travel_co_id, coperson_id, res_id
+      FROM tbl_travel_coperson
+      WHERE after_visit_48hr = CURRENT_DATE
+    `;
+    const coPersonResult = await db.query(coPersonQuery);
+
+    if (!coPersonResult?.rows?.length) {
+      console.log("No co-person reminders to send today.");
+      return;
+    }
+
+    for (const coRow of coPersonResult.rows) {
+
+      const travelQuery = `
+        SELECT res_id, from_date
+        FROM tbl_travel_response
+        WHERE res_id = $1
+      `;
+      const travelResult = await db.query(travelQuery, [coRow.res_id]);
+
+      if (!travelResult?.rows?.length) {
+        console.warn(`No travel found for res_id: ${coRow.res_id}`);
+        continue;
+      }
+
+      const travelData = travelResult.rows[0];
+
+      const coEmpQuery = `
+        SELECT coperson_name, coperson_email, hr_mantra_id
+        FROM tbl_coperson
+        WHERE coperson_id = $1
+      `;
+      const coEmpResult = await db.query(coEmpQuery, [coRow.coperson_id]);
+
+      if (!coEmpResult?.rows?.length) {
+        console.warn(`No co-person found for ID: ${coRow.coperson_id}`);
+        continue;
+      }
+
+      const coPerson = coEmpResult.rows[0];
+
+      // ✅ CORRECT VALUES
+      await sendSecondRemarksMail(
+        coPerson.coperson_name,
+        coPerson.coperson_email,
+        travelData.from_date,
+        coPerson.hr_mantra_id,
+        coRow.travel_co_id  
+      );
+    }
+  } catch (err) {
+    console.error("Error processing co-person reminders:", err);
+  }
+};
 
 const sendSecondRemarks = async () => {
   try {
@@ -229,23 +519,65 @@ const sendSecondRemarks = async () => {
 
 const setTravelRemarks = async (req, res) => {
   try {
+    console.log(req.body);
     const { did_travel, res_id, remarks = "" } = req.body;
 
-    // Validation
     if (!res_id) {
-      return res.status(400).json({ status: 400, message: "Doer is not Correct" });
+      return res.status(400).json({
+        status: 400,
+        message: "Doer is not Correct"
+      });
     }
 
-    // Update query
-    const query = `UPDATE tbl_travel_response SET is_visited = $1, not_visited_reason = $2 WHERE res_id = $3`;
+    // Step 1: Try updating main travel response
+    const updateTravelQuery = `
+      UPDATE tbl_travel_response
+      SET is_visited = $1,
+          not_visited_reason = $2
+      WHERE res_id = $3
+    `;
 
-    await db.query(query, [did_travel, remarks, res_id]);
+    const travelResult = await db.query(updateTravelQuery, [
+      did_travel,
+      remarks,
+      res_id
+    ]);
 
-    return res.status(200).json({ status: 200, message: "Travel remarks updated successfully" });
+    // Step 2: If NOT found, update co-person table
+    if (travelResult.rowCount === 0) {
+
+      const updateCoPersonQuery = `
+        UPDATE tbl_travel_coperson
+        SET is_visited = $1,
+            not_visited_reason = $2
+        WHERE travel_co_id = $3
+      `;
+
+      const coResult = await db.query(updateCoPersonQuery, [
+        did_travel,
+        remarks,
+        res_id   // res_id maps to travel_co_id here
+      ]);
+
+      if (coResult.rowCount === 0) {
+        return res.status(404).json({
+          status: 404,
+          message: "Invalid travel reference"
+        });
+      }
+    }
+
+    return res.status(200).json({
+      status: 200,
+      message: "Travel remarks updated successfully"
+    });
 
   } catch (error) {
     console.error("Error processing data:", error);
-    return res.status(500).json({ status: 500, message: "Internal Server Error" });
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error"
+    });
   }
 };
 
@@ -262,4 +594,152 @@ const getDestination = async (req, res) => {
   }
 };
 
-module.exports = {getEmpList, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination}
+const getCoPerson = async (req, res) => {
+  try {
+    const query = `SELECT coperson_id, coperson_name FROM tbl_coperson`;
+    const result = await db.query(query);
+
+    return res.status(200).json({status: 200, data: result.rows});
+
+  } catch (error) {
+    console.error("Error processing data:", error);
+    return res.status(500).json({ status: 500, message: "Internal Server Error" });
+  }
+};
+
+function formatToISTDate(date) {
+  if (!date) return null;
+
+  return new Date(date).toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+const getTravelDetailsDashboard = async (req, res) => {
+  try {
+
+    const query = `
+      SELECT
+        tr.res_id,
+        tr.hr_mantra_id,
+        emp.name,
+        tr.department,
+
+        tr.from_date,
+        tr.to_date,
+
+        tr.destination AS area_code,
+        ar.area_name AS destination_name,
+
+        tr.ten_prior_mail,
+        tr.six_prior_mail,
+        tr.two_prior_mail,
+        tr.after_visit_24hr,
+        tr.after_visit_48hr,
+        tr.is_visited,
+        tr.not_visited_reason,
+        tr.coperson_id
+
+      FROM tbl_travel_response tr
+
+      LEFT JOIN tbl_emp emp
+        ON emp.hr_mantra_id = tr.hr_mantra_id
+
+      LEFT JOIN tbl_area ar
+        ON ar.area_code = tr.destination
+
+      ORDER BY tr.res_id DESC
+    `;
+
+    const result = await db.query(query);
+
+    const formattedData = result.rows.map(row => ({
+      ...row,
+      from_date: formatToISTDate(row.from_date),
+      to_date: formatToISTDate(row.to_date),
+      ten_prior_mail: formatToISTDate(row.ten_prior_mail),
+      six_prior_mail: formatToISTDate(row.six_prior_mail),
+      two_prior_mail: formatToISTDate(row.two_prior_mail),
+      after_visit_24hr: formatToISTDate(row.after_visit_24hr),
+      after_visit_48hr: formatToISTDate(row.after_visit_48hr)
+    }));
+
+
+    return res.status(200).json({
+      status: 200,
+      count: formattedData.length,
+      data: formattedData
+    });
+
+  } catch (error) {
+    console.error("Error processing data:", error);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error"
+    });
+  }
+};
+
+const getCoPersonDetails = async (req, res) => {
+  try {
+    const { res_id } = req.params;
+
+    if (!res_id) {
+      return res.status(400).json({
+        status: 400,
+        message: "res_id is required"
+      });
+    }
+
+    const query = `
+      SELECT
+        tc.travel_co_id,
+        tc.res_id,
+        tc.coperson_id,
+        emp.coperson_name,
+        tc.after_visit_24hr,
+        tc.after_visit_48hr,
+        tc.is_visited,
+        tc.not_visited_reason
+      FROM tbl_travel_coperson tc
+      LEFT JOIN tbl_coperson emp
+        ON emp.coperson_id = tc.coperson_id
+      WHERE tc.res_id = $1
+      ORDER BY tc.travel_co_id ASC
+    `;
+
+    const result = await db.query(query, [res_id]);
+
+    if (result.rows.length === 0) {
+      return res.status(200).json({
+        status: 200,
+        count: 0,
+        msg: "No co person added for travel"
+      });
+    }
+
+    const formattedData = result.rows.map(row => ({
+      ...row,
+      after_visit_24hr: formatToISTDate(row.after_visit_24hr),
+      after_visit_48hr: formatToISTDate(row.after_visit_48hr)
+    }));
+
+    return res.status(200).json({
+      status: 200,
+      count: formattedData.length,
+      data: formattedData
+    });
+
+  } catch (error) {
+    console.error("Error processing data:", error);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error"
+    });
+  }
+};
+
+module.exports = {getEmpList, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails}

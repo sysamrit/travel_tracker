@@ -1,11 +1,12 @@
-const { getEmpList, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks } = require("./traveltrackerController");
+const { getEmpList, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, sendCoFirstRemarks, sendCoSecondRemarks } = require("./traveltrackerController");
 
 module.exports = [
     {
-        cronTime: '0 6 15 3,6,9,12 *',
+        cronTime: '0 6 1 3,6,9,12 *',
         jobFunction: getEmpList,
         jobName: 'All Employee Email',
-    }, {
+    }, 
+    {
         cronTime: '0 6 * * *',
         jobFunction: sendTenDaysReminder,
         jobName: 'Ten Days Travel Reminder',
@@ -18,17 +19,30 @@ module.exports = [
         jobFunction: sendTwoDaysReminder,
         jobName: 'Two Days Travel Reminder',
     }, {
-        cronTime: '0 6 * * *',
+        cronTime: '* * * * *',
         jobFunction: sendFirstRemarks,
         jobName: 'One Days Travel Reminder',
     }, {
         cronTime: '0 6 * * *',
         jobFunction: sendSecondRemarks,
         jobName: 'Three Days Travel Reminder',
-    },
-    {
+    }, {
         cronTime: '* * * * *',
-        jobFunction: sendTenDaysReminder,
-        jobName: 'All Employee Email',
-    }
+        jobFunction: sendCoFirstRemarks,
+        jobName: 'First Days Travel Reminder',
+    }, {
+        cronTime: '0 6 * * *',
+        jobFunction: sendCoSecondRemarks,
+        jobName: 'First Days Travel Reminder',
+    },
+    // {
+    //     cronTime: '* * * * *',
+    //     jobFunction: sendTenDaysReminder,
+    //     jobName: 'All Employee Email',
+    // },
+    // {
+    //     cronTime: '* * * * *',
+    //     jobFunction: getEmpList,
+    //     jobName: 'All Employee Email',
+    // }
 ]

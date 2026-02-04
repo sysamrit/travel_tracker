@@ -1,52 +1,47 @@
 const { sendEmail } = require("./emailService");
 
 const generateFormLink = (name, empId) => {
-  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_details`;
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}travel_details_form`;
 
   const now = new Date();
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0);
-  const expires = encodeURIComponent(endOfMonth.toISOString());
+  const endOfMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    1,
+    0, 0, 0
+  );
 
-  const params = new URLSearchParams({
-    name: name,
-    emp_id: empId,
-    expires: expires,
-    ts: Date.now().toString()
-  });
-
-  return { formUrl: `${baseUrl}?${params.toString()}`, expires };
-};
-
-const generateFormLinkforRemarks = (name, empId, res_id) => {
-  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks`;
-
-  // Get current IST time
-  const nowUTC = new Date();
-  const IST_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-  const nowIST = new Date(nowUTC.getTime() + IST_OFFSET);
-
-  // Add 5 days
-  const expiresDate = new Date(nowIST);
-  expiresDate.setDate(expiresDate.getDate() + 4);
-
-  // Set to 00:00:00 time
-  expiresDate.setHours(0, 0, 0, 0);
-
-  const expires = encodeURIComponent(expiresDate.toISOString());
-
-  const params = new URLSearchParams({
-    res_id: res_id,
-    name: name,
-    emp_id: empId,
-    expires: expires,
-    ts: Date.now().toString()
-  });
+  const expires = endOfMonth.toISOString();
 
   return {
-    formUrl: `${baseUrl}?${params.toString()}`,
+    formUrl: `${baseUrl}/${encodeURIComponent(name)}/${empId}/${encodeURIComponent(expires)}`,
     expires
   };
 };
+
+const generateFormLinkforRemarks = (name, empId, res_id) => {
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks_form`;
+
+  // Get current IST time
+  const nowUTC = new Date();
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+  const nowIST = new Date(nowUTC.getTime() + IST_OFFSET);
+
+  // Add 4 days
+  const expiresDate = new Date(nowIST);
+  expiresDate.setDate(expiresDate.getDate() + 4);
+
+  // Set expiry time to 00:00:00
+  expiresDate.setHours(0, 0, 0, 0);
+
+  const expiresISO = expiresDate.toISOString();
+
+  return {
+    formUrl: `${baseUrl}/${encodeURIComponent(name)}/${empId}/${res_id}/${encodeURIComponent(expiresISO)}`,
+    expires: expiresISO
+  };
+};
+
 const generateFormOtherLinkforRemarks = (name, empId, res_id) => {
   const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks`;
 
@@ -109,8 +104,7 @@ const sendQuaterlyMail = async (name, email, hrId) => {
   await sendEmail(emailData);
 };
 
-const sendTenReminderMail = async (empName, email, fromDate, destination) => {
-  const cc = `dme-5@amrit.co.in`;
+const sendTenReminderMail = async (empName, email, fromDate, destination, ccEmails = []) => {
   const subject = `Travel Reminder: Upcoming Trip to ${destination}`;
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; color: #333;">
@@ -136,14 +130,13 @@ const sendTenReminderMail = async (empName, email, fromDate, destination) => {
 
   await sendEmail({
     to: email,
-    cc: cc,
+    cc: ccEmails.length ? ccEmails : '',
     subject: subject,
     htmlBody: htmlBody
   });
 };
 
-const sendSixReminderMail = async (empName, email, fromDate, destination) => {
-  const cc = `dme-5@amrit.co.in`;
+const sendSixReminderMail = async (empName, email, fromDate, destination, ccEmails = []) => {
   const subject = `Travel Reminder: Upcoming Trip to ${destination}`;
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; color: #333;">
@@ -169,14 +162,13 @@ const sendSixReminderMail = async (empName, email, fromDate, destination) => {
 
   await sendEmail({
     to: email,
-    cc: cc,
+    cc: ccEmails.length ? ccEmails : '',
     subject: subject,
     htmlBody: htmlBody
   });
 };
 
-const sendTwoReminderMail = async (empName, email, fromDate, destination) => {
-  const cc = `dme-5@amrit.co.in`;
+const sendTwoReminderMail = async (empName, email, fromDate, destination, ccEmails = []) => {
   const subject = `Travel Reminder: Upcoming Trip to ${destination}`;
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; color: #333;">
@@ -202,7 +194,7 @@ const sendTwoReminderMail = async (empName, email, fromDate, destination) => {
 
   await sendEmail({
     to: email,
-    cc: cc,
+    cc: ccEmails.length ? ccEmails : '',
     subject: subject,
     htmlBody: htmlBody
   });
