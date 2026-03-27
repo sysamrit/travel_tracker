@@ -1,7 +1,7 @@
 const { sendEmail } = require("./emailService");
 
 const generateFormLink = (name, empId) => {
-  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}travel_details_form`;
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_details_form`;
 
   const now = new Date();
   const endOfMonth = new Date(
@@ -73,12 +73,9 @@ const generateFormOtherLinkforRemarks = (name, empId, res_id) => {
   };
 };
 
-const sendQuaterlyMail = async (name, email, hrId) => {
-  console.log(name, email, hrId);
-
+const sendQuaterlyMail = async (name, email, hrId, ccEmails = []) => {
   const { formUrl, expires } = generateFormLink(name, hrId);
 
-  // Convert to human-readable IST
   const readableExpiry = new Date(decodeURIComponent(expires)).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     year: 'numeric',
@@ -90,14 +87,44 @@ const sendQuaterlyMail = async (name, email, hrId) => {
 
   const htmlBody = `
     <p>Dear ${name},</p>
-    <p>Please fill out your Travelling Report for this Quarter by clicking the link below:</p>
+    <p>Please fill out your Travelling Report by clicking the link below:</p>
     <p><a href="${formUrl}">Click here to open the form</a></p>
     <p><strong>Note:</strong> This form will expire on <strong>${readableExpiry} IST</strong>.</p>
   `;
 
   const emailData = {
     to: email,
-    subject: `Quarterly Form Submission`,
+    cc: ccEmails,
+    subject: `Travel Details Form Submission`,
+    htmlBody: htmlBody
+  };
+
+  await sendEmail(emailData);
+};
+
+const sendQuaterlyReminderMail = async (name, email, hrId, ccEmails = []) => {
+  const { formUrl, expires } = generateFormLink(name, hrId);
+
+  const readableExpiry = new Date(decodeURIComponent(expires)).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const htmlBody = `
+    <p>Dear ${name},</p>
+    <p>Reminder to please fill out your Travelling Report by clicking the link below:</p>
+    <p><a href="${formUrl}">Click here to open the form</a></p>
+    <p><strong>Note:</strong> This form will expire on <strong>${readableExpiry} IST</strong>.</p>
+  `;
+
+  const emailData = {
+    to: email,
+    cc: ccEmails,
+    subject: `Travel Details Form Submission Reminder`,
     htmlBody: htmlBody
   };
 
@@ -270,4 +297,4 @@ const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_i
   }
 };
 
-module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail };
+module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail };
