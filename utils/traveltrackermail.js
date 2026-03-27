@@ -1,7 +1,7 @@
 const { sendEmail } = require("./emailService");
 
 const generateFormLink = (name, empId) => {
-  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}travel_details_form`;
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_details_form`;
 
   const now = new Date();
   const endOfMonth = new Date(
