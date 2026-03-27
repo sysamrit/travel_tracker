@@ -1,22 +1,168 @@
 const { db } = require("../db/db");
-const { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail } = require("../utils/traveltrackermail");
+const { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail } = require("../utils/traveltrackermail");
 
-const getEmpList = async () => {
+// const getEmpList = async () => {
+//   try {
+//     const empQuery = `SELECT hr_mantra_id, name, email FROM tbl_emp`;
+
+//     const result = await db.query(empQuery);
+
+//     if (!result || !result.rows || result.rows.length == 0) {
+//       console.log("No travel reminders to send today.");
+//       return;
+//     }
+
+//     for (const row of result.rows) {
+//       sendQuaterlyMail(row.name, row.email, row.hr_mantra_id);
+//     }
+//   } catch (err) {
+//     console.error('Error fetching employee list:', err);
+//   }
+// };
+
+const sendMailtoHOD = async () => {
   try {
-    const empQuery = `SELECT hr_mantra_id, name, email FROM tbl_emp`;
 
-    const result = await db.query(empQuery);
+    const query = `
+      SELECT DISTINCT tp.hr_mantra_id,
+                      tp.co_person_id,
+                      e.name,
+                      e.email
+      FROM tbl_travel_plan tp
+      JOIN tbl_emp e ON tp.hr_mantra_id = e.hr_mantra_id
+      WHERE tp.mail_sent_date::date = CURRENT_DATE
+    `;
 
-    if (!result || !result.rows || result.rows.length == 0) {
-      console.log("No travel reminders to send today.");
+    const { rows } = await db.query(query);
+
+    if (!rows.length) {
+      console.log('No row present');
       return;
     }
 
-    for (const row of result.rows) {
-      sendQuaterlyMail(row.name, row.email, row.hr_mantra_id);
+    for (const row of rows) {
+
+      let ccEmails = [];
+
+      if (row.co_person_id && row.co_person_id.trim() !== '') {
+
+        const coPersonIds = row.co_person_id.split(',').map(id => id.trim());
+
+        const { rows: coPersons } = await db.query(
+          `SELECT coperson_email
+           FROM tbl_coperson
+           WHERE hr_mantra_id = ANY($1)`,
+          [coPersonIds]
+        );
+
+        ccEmails = coPersons.map(p => p.coperson_email);
+      }
+
+      await sendQuaterlyMail(
+        row.name,
+        row.email,
+        row.hr_mantra_id,
+        ccEmails
+      );
     }
+
+    await db.query(`
+      UPDATE tbl_travel_plan
+      SET mail_sent = 'YES'
+      WHERE mail_sent_date::date = CURRENT_DATE
+    `);
+
+    console.log('Mail sent successfully');
+
   } catch (err) {
-    console.error('Error fetching employee list:', err);
+    console.error('Error sending mails:', err);
+  }
+};
+
+const sendMailRemindertoHOD = async () => {
+  try {
+
+    const query = `
+      SELECT DISTINCT tp.hr_mantra_id, e.name, e.email
+      FROM tbl_travel_plan tp
+      JOIN tbl_emp e ON tp.hr_mantra_id = e.hr_mantra_id
+      WHERE tp.two_days_prior_date::date = CURRENT_DATE
+    `;
+
+    const { rows } = await db.query(query);
+
+    if (!rows.length) {
+      console.log('No row present');
+    }
+
+    for (const row of rows) {
+      await sendQuaterlyReminderMail(row.name, row.email, row.hr_mantra_id);
+    }
+
+    // await db.query(`CALL travel_plan_calculation()`);
+
+    console.log('Mail sent successfully:');
+
+  } catch (err) {
+    console.error('Error sending mails:', err);
+  }
+};
+
+const sendMailReminder2toHOD = async () => {
+  try {
+
+    const query = `
+      SELECT DISTINCT tp.hr_mantra_id, e.name, e.email
+      FROM tbl_travel_plan tp
+      JOIN tbl_emp e ON tp.hr_mantra_id = e.hr_mantra_id
+      WHERE tp.six_days_prior_date::date = CURRENT_DATE
+    `;
+
+    const { rows } = await db.query(query);
+
+    if (!rows.length) {
+      console.log('No row present');
+    }
+
+    for (const row of rows) {
+      await sendQuaterlyReminderMail(row.name, row.email, row.hr_mantra_id);
+    }
+
+    await db.query(`CALL travel_plan_calculation()`);
+
+    console.log('Mail sent successfully:');
+
+  } catch (err) {
+    console.error('Error sending mails:', err);
+  }
+};
+
+const sendMailReminder3toHOD = async () => {
+  try {
+
+    const query = `
+      SELECT DISTINCT tp.hr_mantra_id, e.name, e.email
+      FROM tbl_travel_plan tp
+      JOIN tbl_emp e ON tp.hr_mantra_id = e.hr_mantra_id
+      WHERE tp.ten_days_prior_date::date = CURRENT_DATE
+    `;
+
+    const { rows } = await db.query(query);
+
+    if (!rows.length) {
+      console.log('No row present');
+    }
+
+    for (const row of rows) {
+      await sendQuaterlyReminderMail(row.name, row.email, row.hr_mantra_id);
+    }
+
+    await db.query(`CALL travel_plan_calculation()`);
+
+    console.log('Mail sent successfully:');
+
+  } catch (err) {
+    console.error('Error sending mails:', err);
   }
 };
 
@@ -742,4 +888,4 @@ const getCoPersonDetails = async (req, res) => {
   }
 };
 
-module.exports = {getEmpList, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails}
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD}
