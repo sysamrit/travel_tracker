@@ -227,14 +227,13 @@ const sendTwoReminderMail = async (empName, email, fromDate, destination, ccEmai
   });
 };
 
-const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => {
+const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id, ccEmails = []) => {
+  console.log(ccEmails);
   const { formUrl, expires } = generateFormLinkforRemarks(name, hr_mantra_id, res_id);
 
-  // Format from_date as MM/dd/yyyy
   const visitDate = new Date(from_date);
   const formattedVisitDate = `${(visitDate.getMonth() + 1).toString().padStart(2, '0')}/${visitDate.getDate().toString().padStart(2, '0')}/${visitDate.getFullYear()}`;
 
-  // Format expires date as MM/dd/yyyy
   const expiresDate = new Date(decodeURIComponent(expires));
   const formattedExpiresDate = `${(expiresDate.getMonth() + 1).toString().padStart(2, '0')}/${expiresDate.getDate().toString().padStart(2, '0')}/${expiresDate.getFullYear()}`;
 
@@ -253,19 +252,25 @@ const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id
   try {
     await sendEmail({
       to: email,
+      cc: ccEmails,
       subject,
       htmlBody
     });
-    console.log(`First remarks email sent to ${name} (${email})`);
+
+    console.log(
+      `First remarks email sent to ${name} (${email})` +
+      (ccEmails.length ? ` | CC: ${ccEmails.join(', ')}` : '')
+    );
+
   } catch (err) {
     console.error(`Failed to send first remarks email to ${email}:`, err);
   }
 };
 
-const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => { 
+const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_id, ccEmails = []) => { 
   const { formUrl, expires } = generateFormOtherLinkforRemarks(name, hr_mantra_id, res_id);
 
-    // Format from_date as MM/dd/yyyy
+  // Format from_date as MM/dd/yyyy
   const visitDate = new Date(from_date);
   const formattedVisitDate = `${(visitDate.getMonth() + 1).toString().padStart(2, '0')}/${visitDate.getDate().toString().padStart(2, '0')}/${visitDate.getFullYear()}`;
 
@@ -288,10 +293,16 @@ const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_i
   try {
     await sendEmail({
       to: email,
+      cc: ccEmails, // ✅ added CC
       subject,
       htmlBody
     });
-    console.log(`Reminder email sent to ${name} (${email})`);
+
+    console.log(
+      `Reminder email sent to ${name} (${email})` +
+      (ccEmails.length ? ` | CC: ${ccEmails.join(', ')}` : '')
+    );
+
   } catch (err) {
     console.error(`Failed to send reminder email to ${email}:`, err);
   }

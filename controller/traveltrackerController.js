@@ -250,7 +250,7 @@ const setTravelDetails = async (req, res) => {
 const sendTenDaysReminder = async () => {
   try {
     const travelQuery = `
-      SELECT res_id, hr_mantra_id, from_date, destination, coperson_id
+      SELECT res_id, hr_mantra_id, from_date, destination
       FROM tbl_travel_response
       WHERE ten_prior_mail = CURRENT_DATE
     `;
@@ -266,7 +266,7 @@ const sendTenDaysReminder = async () => {
 
       /* -------- EMPLOYEE DETAILS -------- */
       const empQuery = `
-        SELECT name, email
+        SELECT name, email, co_person_id
         FROM tbl_emp
         WHERE hr_mantra_id = $1
       `;
@@ -291,22 +291,24 @@ const sendTenDaysReminder = async () => {
       /* -------- CO-PERSON EMAILS -------- */
       let ccEmails = [];
 
-      if (travelRow.coperson_id) {
-        // "100001,100002" → ["100001","100002"]
-        const copersonIds = travelRow.coperson_id
+      if (empData.co_person_id) {
+        const copersonIds = empData.co_person_id
           .split(',')
           .map(id => id.trim())
           .filter(Boolean);
 
-        if (copersonIds.length > 0) {
-          const copersonEmailQuery = `
+        if (copersonIds.length) {
+          const copersonQuery = `
             SELECT coperson_email
             FROM tbl_coperson
-            WHERE coperson_id = ANY($1::int[])
+            WHERE hr_mantra_id = ANY($1::text[])
           `;
 
-          const emailResult = await db.query(copersonEmailQuery, [copersonIds]);
-          ccEmails = emailResult.rows.map(r => r.coperson_email);
+          const copersonResult = await db.query(copersonQuery, [copersonIds]);
+
+          ccEmails = copersonResult.rows
+            .map(r => r.coperson_email)
+            .filter(Boolean);
         }
       }
 
@@ -328,7 +330,7 @@ const sendTenDaysReminder = async () => {
 const sendSixDaysReminder = async () => {
   try {
     const travelQuery = `
-      SELECT hr_mantra_id, from_date, destination, coperson_id
+      SELECT hr_mantra_id, from_date, destination
       FROM tbl_travel_response
       WHERE six_prior_mail = CURRENT_DATE
     `;
@@ -345,7 +347,7 @@ const sendSixDaysReminder = async () => {
          EMPLOYEE
       ===================== */
       const empQuery = `
-        SELECT name, email
+        SELECT name, email, co_person_id
         FROM tbl_emp
         WHERE hr_mantra_id = $1
       `;
@@ -370,21 +372,24 @@ const sendSixDaysReminder = async () => {
       ===================== */
       let ccEmails = [];
 
-      if (travelRow.coperson_id) {
-        const copersonIds = travelRow.coperson_id
+      if (empData.co_person_id) {
+        const copersonIds = empData.co_person_id
           .split(',')
           .map(id => id.trim())
           .filter(Boolean);
 
         if (copersonIds.length) {
           const copersonQuery = `
-            SELECT email
+            SELECT coperson_email
             FROM tbl_coperson
-            WHERE coperson_id = ANY($1::int[])
+            WHERE hr_mantra_id = ANY($1::text[])
           `;
 
           const copersonResult = await db.query(copersonQuery, [copersonIds]);
-          ccEmails = copersonResult.rows.map(r => r.email);
+
+          ccEmails = copersonResult.rows
+            .map(r => r.coperson_email)
+            .filter(Boolean);
         }
       }
 
@@ -452,21 +457,24 @@ const sendTwoDaysReminder = async () => {
       ===================== */
       let ccEmails = [];
 
-      if (travelRow.coperson_id) {
-        const copersonIds = travelRow.coperson_id
+      if (empData.co_person_id) {
+        const copersonIds = empData.co_person_id
           .split(',')
           .map(id => id.trim())
           .filter(Boolean);
 
         if (copersonIds.length) {
           const copersonQuery = `
-            SELECT email
+            SELECT coperson_email
             FROM tbl_coperson
-            WHERE coperson_id = ANY($1::int[])
+            WHERE hr_mantra_id = ANY($1::text[])
           `;
 
           const copersonResult = await db.query(copersonQuery, [copersonIds]);
-          ccEmails = copersonResult.rows.map(r => r.email);
+
+          ccEmails = copersonResult.rows
+            .map(r => r.coperson_email)
+            .filter(Boolean);
         }
       }
 
@@ -491,7 +499,11 @@ const sendTwoDaysReminder = async () => {
 
 const sendFirstRemarks = async () => {
   try {
-    const travelQuery = `SELECT res_id, from_date, hr_mantra_id FROM tbl_travel_response WHERE after_visit_24hr = CURRENT_DATE;`;
+    const travelQuery = `
+      SELECT res_id, from_date, hr_mantra_id
+      FROM tbl_travel_response 
+      WHERE after_visit_24hr = CURRENT_DATE;
+    `;
     const travelResult = await db.query(travelQuery);
 
     if (!travelResult || !travelResult.rows || travelResult.rows.length === 0) {
@@ -500,19 +512,57 @@ const sendFirstRemarks = async () => {
     }
 
     for (const travelRow of travelResult.rows) {
-      const empQuery = `SELECT name, email FROM tbl_emp WHERE hr_mantra_id = $1`;
+
+      // ✅ Fetch co_person_id from tbl_emp
+      const empQuery = `
+        SELECT name, email, co_person_id 
+        FROM tbl_emp 
+        WHERE hr_mantra_id = $1
+      `;
       const empResult = await db.query(empQuery, [travelRow.hr_mantra_id]);
 
-      if (!empResult || !empResult.rows || empResult.rows.length == 0) {
+      if (!empResult || empResult.rows.length === 0) {
         console.warn(`No employee found for HR Mantra ID: ${travelRow.hr_mantra_id}`);
         continue;
       }
 
       const empData = empResult.rows[0];
 
-      // Step 3: Send the email
-      await sendFirstRemarksMail(empData.name, empData.email, travelRow.from_date, travelRow.hr_mantra_id, travelRow.res_id);
+      // ✅ Build CC emails
+      let ccEmails = [];
+
+      if (empData.co_person_id) {
+        const copersonIds = empData.co_person_id
+          .split(',')
+          .map(id => id.trim())
+          .filter(Boolean);
+
+        if (copersonIds.length) {
+          const copersonQuery = `
+            SELECT coperson_email
+            FROM tbl_coperson
+            WHERE hr_mantra_id = ANY($1::text[])
+          `;
+
+          const copersonResult = await db.query(copersonQuery, [copersonIds]);
+
+          ccEmails = copersonResult.rows
+            .map(r => r.coperson_email)
+            .filter(Boolean);
+        }
+      }
+
+      // ✅ Send email with CC
+      await sendFirstRemarksMail(
+        empData.name,
+        empData.email,
+        travelRow.from_date,
+        travelRow.hr_mantra_id,
+        travelRow.res_id,
+        ccEmails
+      );
     }
+
   } catch (err) {
     console.error("Error processing data:", err);
   }
@@ -636,7 +686,12 @@ const sendCoSecondRemarks = async () => {
 
 const sendSecondRemarks = async () => {
   try {
-    const travelQuery = `SELECT res_id, from_date, hr_mantra_id FROM tbl_travel_response WHERE after_visit_48hr = CURRENT_DATE AND (is_visited = '' OR is_visited IS NULL);`;
+    const travelQuery = `
+      SELECT res_id, from_date, hr_mantra_id
+      FROM tbl_travel_response 
+      WHERE after_visit_48hr = CURRENT_DATE 
+      AND (is_visited = '' OR is_visited IS NULL);
+    `;
 
     const travelResult = await db.query(travelQuery);
 
@@ -646,18 +701,57 @@ const sendSecondRemarks = async () => {
     }
 
     for (const travelRow of travelResult.rows) {
-      const empQuery = `SELECT name, email FROM tbl_emp WHERE hr_mantra_id = $1`;
+
+      // ✅ Fetch co_person_id from tbl_emp
+      const empQuery = `
+        SELECT name, email, co_person_id 
+        FROM tbl_emp 
+        WHERE hr_mantra_id = $1
+      `;
       const empResult = await db.query(empQuery, [travelRow.hr_mantra_id]);
 
-      if (!empResult || !empResult.rows || empResult.rows.length == 0) {
+      if (!empResult || empResult.rows.length === 0) {
         console.warn(`No employee found for HR Mantra ID: ${travelRow.hr_mantra_id}`);
         continue;
       }
 
       const empData = empResult.rows[0];
 
-      sendSecondRemarksMail(empData.name, empData.email, travelRow.from_date, travelRow.hr_mantra_id, travelRow.res_id);
+      // ✅ Build CC emails
+      let ccEmails = [];
+
+      if (empData.co_person_id) {
+        const copersonIds = empData.co_person_id
+          .split(',')
+          .map(id => id.trim())
+          .filter(Boolean);
+
+        if (copersonIds.length) {
+          const copersonQuery = `
+            SELECT coperson_email
+            FROM tbl_coperson
+            WHERE hr_mantra_id = ANY($1::text[])
+          `;
+
+          const copersonResult = await db.query(copersonQuery, [copersonIds]);
+
+          ccEmails = copersonResult.rows
+            .map(r => r.coperson_email)
+            .filter(Boolean);
+        }
+      }
+
+      // ✅ Send mail with CC
+      await sendSecondRemarksMail(
+        empData.name,
+        empData.email,
+        travelRow.from_date,
+        travelRow.hr_mantra_id,
+        travelRow.res_id,
+        ccEmails
+      );
     }
+
   } catch (err) {
     console.error("Error processing data:", err);
   }
@@ -665,7 +759,6 @@ const sendSecondRemarks = async () => {
 
 const setTravelRemarks = async (req, res) => {
   try {
-    console.log(req.body);
     const { did_travel, res_id, remarks = "" } = req.body;
 
     if (!res_id) {
