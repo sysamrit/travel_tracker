@@ -7,7 +7,7 @@ module.exports = [
     //     jobName: 'All Employee Email',
     // }, 
     {
-        cronTime: '* * * * *',
+        cronTime: '0 6 * * *',
         jobFunction: sendMailtoHOD,
         jobName: 'HOD Travel Mail Send',
     },
