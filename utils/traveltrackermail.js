@@ -219,14 +219,30 @@ const sendTwoReminderMail = async (empName, email, fromDate, destination, ccEmai
   });
 };
 
-const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => {
+const sendFirstRemarksMail = async (
+  name,
+  email,
+  from_date,
+  hr_mantra_id,
+  res_id,
+  ccEmails = [] // ✅ default added
+) => {
+
   const { formUrl, expires } = generateFormLinkforRemarks(name, hr_mantra_id, res_id);
 
   const visitDate = new Date(from_date);
-  const formattedVisitDate = `${(visitDate.getMonth() + 1).toString().padStart(2, '0')}/${visitDate.getDate().toString().padStart(2, '0')}/${visitDate.getFullYear()}`;
+  const formattedVisitDate = `${(visitDate.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}/${visitDate.getDate()
+    .toString()
+    .padStart(2, '0')}/${visitDate.getFullYear()}`;
 
   const expiresDate = new Date(decodeURIComponent(expires));
-  const formattedExpiresDate = `${(expiresDate.getMonth() + 1).toString().padStart(2, '0')}/${expiresDate.getDate().toString().padStart(2, '0')}/${expiresDate.getFullYear()}`;
+  const formattedExpiresDate = `${(expiresDate.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}/${expiresDate.getDate()
+    .toString()
+    .padStart(2, '0')}/${expiresDate.getFullYear()}`;
 
   const subject = `Submit Your Travel Remarks for Visit on ${formattedVisitDate}`;
 
@@ -243,11 +259,12 @@ const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id
   try {
     await sendEmail({
       to: email,
-      // cc: ccEmails,
+      // cc: ccEmails, // ✅ keep commented
       subject,
       htmlBody
     });
 
+    // ✅ Safe logging (no crash now)
     console.log(
       `First remarks email sent to ${name} (${email})` +
       (ccEmails.length ? ` | CC: ${ccEmails.join(', ')}` : '')
@@ -258,16 +275,32 @@ const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id
   }
 };
 
-const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => { 
+const sendSecondRemarksMail = async (
+  name,
+  email,
+  from_date,
+  hr_mantra_id,
+  res_id,
+  ccEmails = [] // ✅ default added
+) => {
+
   const { formUrl, expires } = generateFormOtherLinkforRemarks(name, hr_mantra_id, res_id);
 
-  // Format from_date as MM/dd/yyyy
+  // Format from_date
   const visitDate = new Date(from_date);
-  const formattedVisitDate = `${(visitDate.getMonth() + 1).toString().padStart(2, '0')}/${visitDate.getDate().toString().padStart(2, '0')}/${visitDate.getFullYear()}`;
+  const formattedVisitDate = `${(visitDate.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}/${visitDate.getDate()
+    .toString()
+    .padStart(2, '0')}/${visitDate.getFullYear()}`;
 
-  // Format expires date as MM/dd/yyyy
+  // Format expires date
   const expiresDate = new Date(decodeURIComponent(expires));
-  const formattedExpiresDate = `${(expiresDate.getMonth() + 1).toString().padStart(2, '0')}/${expiresDate.getDate().toString().padStart(2, '0')}/${expiresDate.getFullYear()}`;
+  const formattedExpiresDate = `${(expiresDate.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}/${expiresDate.getDate()
+    .toString()
+    .padStart(2, '0')}/${expiresDate.getFullYear()}`;
 
   const subject = `Reminder: Submit Your Travel Remarks for Visit on ${formattedVisitDate}`;
 
@@ -284,11 +317,12 @@ const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_i
   try {
     await sendEmail({
       to: email,
-      // cc: ccEmails, // ✅ added CC
+      // cc: ccEmails, // ✅ keep disabled for now
       subject,
       htmlBody
     });
 
+    // ✅ Safe logging
     console.log(
       `Reminder email sent to ${name} (${email})` +
       (ccEmails.length ? ` | CC: ${ccEmails.join(', ')}` : '')

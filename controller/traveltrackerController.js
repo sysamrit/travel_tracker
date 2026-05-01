@@ -504,16 +504,17 @@ const sendFirstRemarks = async () => {
       FROM tbl_travel_response 
       WHERE after_visit_24hr = CURRENT_DATE;
     `;
+
     const travelResult = await db.query(travelQuery);
 
-    if (!travelResult || !travelResult.rows || travelResult.rows.length === 0) {
+    if (!travelResult?.rows?.length) {
       console.log("No travel reminders to send today.");
       return;
     }
 
     for (const travelRow of travelResult.rows) {
 
-      // ✅ Fetch co_person_id from tbl_emp
+      // 🔹 Get employee details
       const empQuery = `
         SELECT name, email, co_person_id 
         FROM tbl_emp 
@@ -521,14 +522,14 @@ const sendFirstRemarks = async () => {
       `;
       const empResult = await db.query(empQuery, [travelRow.hr_mantra_id]);
 
-      if (!empResult || empResult.rows.length === 0) {
+      if (!empResult?.rows?.length) {
         console.warn(`No employee found for HR Mantra ID: ${travelRow.hr_mantra_id}`);
         continue;
       }
 
       const empData = empResult.rows[0];
 
-      // ✅ Build CC emails
+      // 🔹 Build CC emails (kept for future use)
       let ccEmails = [];
 
       if (empData.co_person_id) {
@@ -552,14 +553,14 @@ const sendFirstRemarks = async () => {
         }
       }
 
-      // ✅ Send email with CC
+      // 🔹 Send email (CC NOT used currently)
       await sendFirstRemarksMail(
         empData.name,
         empData.email,
         travelRow.from_date,
         travelRow.hr_mantra_id,
         travelRow.res_id
-        // ccEmails
+        // ccEmails ← keep commented if not needed now
       );
     }
 
