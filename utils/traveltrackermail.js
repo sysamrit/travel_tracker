@@ -227,8 +227,7 @@ const sendTwoReminderMail = async (empName, email, fromDate, destination, ccEmai
   });
 };
 
-const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id, ccEmails = []) => {
-  console.log(ccEmails);
+const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => {
   const { formUrl, expires } = generateFormLinkforRemarks(name, hr_mantra_id, res_id);
 
   const visitDate = new Date(from_date);
@@ -252,7 +251,7 @@ const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id
   try {
     await sendEmail({
       to: email,
-      cc: ccEmails,
+      // cc: ccEmails,
       subject,
       htmlBody
     });
@@ -267,7 +266,7 @@ const sendFirstRemarksMail = async (name, email, from_date, hr_mantra_id, res_id
   }
 };
 
-const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_id, ccEmails = []) => { 
+const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_id) => { 
   const { formUrl, expires } = generateFormOtherLinkforRemarks(name, hr_mantra_id, res_id);
 
   // Format from_date as MM/dd/yyyy
@@ -293,7 +292,7 @@ const sendSecondRemarksMail = async (name, email, from_date, hr_mantra_id, res_i
   try {
     await sendEmail({
       to: email,
-      cc: ccEmails, // ✅ added CC
+      // cc: ccEmails, // ✅ added CC
       subject,
       htmlBody
     });

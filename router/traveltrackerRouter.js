@@ -8,7 +8,7 @@ travtrack.post('/login', setLogin);
 travtrack.put('/settravelremarks', setTravelRemarks);
 travtrack.get('/getdestination', getDestination);
 travtrack.get('/getcopersons', getCoPerson);
-travtrack.get('/get/details/dashboard', getTravelDetailsDashboard);
+travtrack.post('/get/details/dashboard', getTravelDetailsDashboard);
 travtrack.get('/get/details/dashboard/:hr_mantra_id', getTravelDashboardbyID);
 travtrack.get('/get/codetails/dashboard/:res_id', getCoPersonDetails);
 

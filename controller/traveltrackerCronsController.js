@@ -7,7 +7,7 @@ module.exports = [
     //     jobName: 'All Employee Email',
     // }, 
     {
-        cronTime: '* * * * *',
+        cronTime: '0 6 * * *',
         jobFunction: sendMailtoHOD,
         jobName: 'HOD Travel Mail Send',
     },
@@ -35,13 +35,14 @@ module.exports = [
         cronTime: '0 6 * * *',
         jobFunction: sendSixDaysReminder,
         jobName: 'Six Days Travel Reminder',
-    }, {
-        cronTime: '0 6 * * *',
-        jobFunction: sendTwoDaysReminder,
-        jobName: 'Two Days Travel Reminder',
-    },
+    }, 
+    // {
+    //     cronTime: '0 6 * * *',
+    //     jobFunction: sendTwoDaysReminder,
+    //     jobName: 'Two Days Travel Reminder',
+    // },
     {
-        cronTime: '* * * * *',
+        cronTime: '0 6 * * *',
         jobFunction: sendFirstRemarks,
         jobName: 'One Days Travel Reminder',
     }, {
