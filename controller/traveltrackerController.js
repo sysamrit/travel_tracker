@@ -981,4 +981,156 @@ const getCoPersonDetails = async (req, res) => {
   }
 };
 
-module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD}
+const setLogin = async (req, res) => {
+  try {
+    let { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        message: "hr_mantra_id and password are required"
+      });
+    }
+
+    let hr_mantra_id = username;
+
+    const loginQuery = `
+      SELECT *
+      FROM tbl_login
+      WHERE hr_mantra_id = $1 AND password = $2
+    `;
+
+    const loginResult = await db.query(loginQuery, [hr_mantra_id, password]);
+
+    if (loginResult.rows.length === 0) {
+      return res.status(401).json({
+        message: "Invalid credentials"
+      });
+    }
+
+    const user = loginResult.rows[0];
+
+    if (user.designation !== "EA") {
+      return res.status(200).json({
+        message: "Login successful",
+        data: user,
+        mappedUsers: []
+      });
+    }
+
+    const empQuery = `
+      SELECT hr_mantra_id
+      FROM tbl_emp
+      WHERE co_person_id IS NOT NULL
+      AND $1 = ANY(string_to_array(REPLACE(co_person_id, ' ', ''), ','))
+    `;
+
+    const empResult = await db.query(empQuery, [hr_mantra_id]);
+
+    const mappedIds = [...new Set(
+      empResult.rows.map(row => row.hr_mantra_id)
+    )];
+
+    if (mappedIds.length === 0) {
+      return res.status(200).json({
+        message: "Login successful (no mapped users)",
+        data: user,
+        mappedUsers: []
+      });
+    }
+
+    const mappedQuery = `
+      SELECT hr_mantra_id, name, designation, email
+      FROM tbl_login
+      WHERE hr_mantra_id = ANY($1)
+    `;
+
+    const mappedResult = await db.query(mappedQuery, [mappedIds]);
+
+    return res.status(200).json({
+      message: "Login successful",
+      data: user,
+      mappedUsers: mappedResult.rows
+    });
+
+  } catch (error) {
+    console.error("Login Error:", error);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+};
+
+const getTravelDashboardbyID = async (req, res) => {
+  try {
+    let {hr_mantra_id} = req.params;
+    if (!hr_mantra_id) {
+      return res.status(400).json({
+        status: 400,
+        message: "Hr Mantra ID is required"
+      });
+    }
+    const query = `
+      SELECT
+        tr.res_id,
+        tr.hr_mantra_id,
+        emp.name,
+        tr.department,
+
+        tr.from_date,
+        tr.to_date,
+
+        tr.destination AS area_code,
+        ar.area_name AS destination_name,
+
+        tr.ten_prior_mail,
+        tr.six_prior_mail,
+        tr.two_prior_mail,
+        tr.after_visit_24hr,
+        tr.after_visit_48hr,
+        tr.is_visited,
+        tr.not_visited_reason,
+        tr.coperson_id
+
+      FROM tbl_travel_response tr
+
+      LEFT JOIN tbl_emp emp
+        ON emp.hr_mantra_id = tr.hr_mantra_id
+
+      LEFT JOIN tbl_area ar
+        ON ar.area_code = tr.destination
+
+      WHERE tr.hr_mantra_id = $1
+
+      ORDER BY tr.res_id DESC
+    `;
+
+    const result = await db.query(query, [hr_mantra_id]);
+
+    const formattedData = result.rows.map(row => ({
+      ...row,
+      from_date: formatToISTDate(row.from_date),
+      to_date: formatToISTDate(row.to_date),
+      ten_prior_mail: formatToISTDate(row.ten_prior_mail),
+      six_prior_mail: formatToISTDate(row.six_prior_mail),
+      two_prior_mail: formatToISTDate(row.two_prior_mail),
+      after_visit_24hr: formatToISTDate(row.after_visit_24hr),
+      after_visit_48hr: formatToISTDate(row.after_visit_48hr)
+    }));
+
+
+    return res.status(200).json({
+      status: 200,
+      count: formattedData.length,
+      data: formattedData
+    });
+
+  } catch (error) {
+    console.error("Error processing data:", error);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error"
+    });
+  }
+}
+
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID}
