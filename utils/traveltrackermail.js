@@ -43,33 +43,25 @@ const generateFormLinkforRemarks = (name, empId, res_id) => {
 };
 
 const generateFormOtherLinkforRemarks = (name, empId, res_id) => {
-  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks`;
+  const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks_form`;
 
   // Get current IST time
   const nowUTC = new Date();
-  const IST_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000;
   const nowIST = new Date(nowUTC.getTime() + IST_OFFSET);
 
-  // Add 5 days
+  // Add 4 days
   const expiresDate = new Date(nowIST);
-  expiresDate.setDate(expiresDate.getDate() + 2);
+  expiresDate.setDate(expiresDate.getDate() + 4);
 
-  // Set to 00:00:00 time
+  // Set expiry time to 00:00:00
   expiresDate.setHours(0, 0, 0, 0);
 
-  const expires = encodeURIComponent(expiresDate.toISOString());
-
-  const params = new URLSearchParams({
-    res_id: res_id,
-    name: name,
-    emp_id: empId,
-    expires: expires,
-    ts: Date.now().toString()
-  });
+  const expiresISO = expiresDate.toISOString();
 
   return {
-    formUrl: `${baseUrl}?${params.toString()}`,
-    expires
+    formUrl: `${baseUrl}/${encodeURIComponent(name)}/${empId}/${res_id}/${encodeURIComponent(expiresISO)}`,
+    expires: expiresISO
   };
 };
 
