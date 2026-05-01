@@ -35,11 +35,12 @@ module.exports = [
         cronTime: '0 6 * * *',
         jobFunction: sendSixDaysReminder,
         jobName: 'Six Days Travel Reminder',
-    }, {
-        cronTime: '0 6 * * *',
-        jobFunction: sendTwoDaysReminder,
-        jobName: 'Two Days Travel Reminder',
-    },
+    }, 
+    // {
+    //     cronTime: '0 6 * * *',
+    //     jobFunction: sendTwoDaysReminder,
+    //     jobName: 'Two Days Travel Reminder',
+    // },
     {
         cronTime: '0 6 * * *',
         jobFunction: sendFirstRemarks,

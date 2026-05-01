@@ -558,8 +558,8 @@ const sendFirstRemarks = async () => {
         empData.email,
         travelRow.from_date,
         travelRow.hr_mantra_id,
-        travelRow.res_id,
-        ccEmails
+        travelRow.res_id
+        // ccEmails
       );
     }
 
@@ -747,8 +747,8 @@ const sendSecondRemarks = async () => {
         empData.email,
         travelRow.from_date,
         travelRow.hr_mantra_id,
-        travelRow.res_id,
-        ccEmails
+        travelRow.res_id
+        // ccEmails
       );
     }
 
@@ -859,6 +859,35 @@ function formatToISTDate(date) {
 
 const getTravelDetailsDashboard = async (req, res) => {
   try {
+    let { from_date = '', to_date = '' } = req.body;
+
+    let fromDate = from_date;
+    let toDate = to_date;
+
+    let conditions = [];
+    let values = [];
+
+    // ✅ Case 1: Only fromDate → from that date onward
+    if (fromDate && !toDate) {
+      values.push(fromDate);
+      conditions.push(`tr.from_date >= $${values.length}`);
+    }
+
+    // ✅ Case 2: Both fromDate & toDate → inclusive range
+    if (fromDate && toDate) {
+      values.push(fromDate);
+      values.push(toDate);
+
+      // Important: include full toDate (handles timestamp issue)
+      conditions.push(
+        `tr.from_date >= $${values.length - 1} 
+         AND tr.from_date < ($${values.length}::date + INTERVAL '1 day')`
+      );
+    }
+
+    // ✅ Build WHERE clause dynamically
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const query = `
       SELECT
@@ -890,10 +919,12 @@ const getTravelDetailsDashboard = async (req, res) => {
       LEFT JOIN tbl_area ar
         ON ar.area_code = tr.destination
 
+      ${whereClause}
+
       ORDER BY tr.res_id DESC
     `;
 
-    const result = await db.query(query);
+    const result = await db.query(query, values);
 
     const formattedData = result.rows.map(row => ({
       ...row,
@@ -905,7 +936,6 @@ const getTravelDetailsDashboard = async (req, res) => {
       after_visit_24hr: formatToISTDate(row.after_visit_24hr),
       after_visit_48hr: formatToISTDate(row.after_visit_48hr)
     }));
-
 
     return res.status(200).json({
       status: 200,
