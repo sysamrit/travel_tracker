@@ -41,7 +41,7 @@ module.exports = [
         jobName: 'Two Days Travel Reminder',
     },
     {
-        cronTime: '* * * * *',
+        cronTime: '0 6 * * *',
         jobFunction: sendFirstRemarks,
         jobName: 'One Days Travel Reminder',
     }, {

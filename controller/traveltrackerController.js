@@ -25,7 +25,7 @@ const sendMailtoHOD = async () => {
 
     const query = `
       SELECT DISTINCT tp.hr_mantra_id,
-                      tp.co_person_id,
+                      e.co_person_id,
                       e.name,
                       e.email
       FROM tbl_travel_plan tp
