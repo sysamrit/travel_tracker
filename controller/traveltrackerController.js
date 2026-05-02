@@ -1228,7 +1228,6 @@ const getTravelDetailsbyResID = async (req, res) => {
 
 const setTravelDetailsbyResID = async (req, res) => {
   try {
-    console.log(req.body);
     const { res_id, from_date, to_date } = req.body;
 
     // ✅ Validation
