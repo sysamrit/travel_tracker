@@ -1164,4 +1164,108 @@ const getTravelDashboardbyID = async (req, res) => {
   }
 }
 
-module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID}
+const getTravelDetailsbyResID = async (req, res) => {
+  try {
+    const { res_id } = req.params;
+
+    if (!res_id) {
+      return res.status(400).json({
+        message: "res_id is required"
+      });
+    }
+
+    const query = `
+      SELECT 
+        tr.res_id,
+        tr.hr_mantra_id,
+        emp.name,
+        tr.department,
+        tr.from_date,
+        tr.to_date,
+        tr.destination AS area_code,
+        ar.area_name
+      FROM tbl_travel_response tr
+      LEFT JOIN tbl_emp emp 
+        ON tr.hr_mantra_id = emp.hr_mantra_id
+      LEFT JOIN tbl_area ar
+        ON tr.destination = ar.area_code
+      WHERE tr.res_id = $1
+    `;
+
+    const result = await db.query(query, [res_id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "No travel record found"
+      });
+    }
+
+    const data = result.rows[0];
+
+    // ✅ Function to convert to IST and format YYYY-MM-DD
+    const formatToDate = (date) => {
+      if (!date) return null;
+
+      const d = new Date(date);
+      return d.toISOString().split("T")[0]; // YYYY-MM-DD
+    };
+
+    data.from_date = formatToISTDate(data.from_date);
+    data.to_date = formatToISTDate(data.to_date);
+
+    return res.status(200).json({
+      message: "Travel details fetched successfully",
+      data
+    });
+
+  } catch (error) {
+    console.error("Error fetching travel details:", error);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+};
+
+const setTravelDetailsbyResID = async (req, res) => {
+  try {
+    console.log(req.body);
+    const { res_id, from_date, to_date } = req.body;
+
+    // ✅ Validation
+    if (!res_id || !from_date || !to_date) {
+      return res.status(400).json({
+        message: "res_id, from_date and to_date are required"
+      });
+    }
+
+    const query = `
+      UPDATE tbl_travel_response
+      SET 
+        from_date = $1,
+        to_date = $2
+      WHERE res_id = $3
+      RETURNING *
+    `;
+
+    const result = await db.query(query, [from_date, to_date, res_id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "No record found with this res_id"
+      });
+    }
+
+    return res.status(200).json({
+      message: "Travel dates updated successfully",
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("Error updating travel details:", error);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+};
+
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID}
