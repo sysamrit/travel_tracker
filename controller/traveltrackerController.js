@@ -1,5 +1,5 @@
 const { db } = require("../db/db");
-const { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail } = require("../utils/traveltrackermail");
+const { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail, sendPasswordResetEmail } = require("../utils/traveltrackermail");
 
 // const getEmpList = async () => {
 //   try {
@@ -1267,4 +1267,102 @@ const setTravelDetailsbyResID = async (req, res) => {
   }
 };
 
-module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID}
+const getIdForChangePassword = async (req, res) => {
+    try {
+        const { hr_mantra_id } = req.body;
+
+        if (!hr_mantra_id) {
+            return res.status(400).json({
+                status: 400,
+                message: "Please provide hr_mantra_id."
+            });
+        }
+
+        const emailQuery = `
+            SELECT email
+            FROM tbl_login
+            WHERE hr_mantra_id = $1
+            LIMIT 1
+        `;
+
+        const result = await db.query(emailQuery, [hr_mantra_id]);
+
+        // Check if user exists
+        if (result.rows.length <= 0) {
+            return res.status(401).json({
+                status: 401,
+                message: "Please provide correct id."
+            });
+        }
+
+        const email = result.rows[0].email;
+
+        const emailResponse = await sendPasswordResetEmail(email, hr_mantra_id);
+
+        return res.status(emailResponse.status).json(emailResponse);
+
+    } catch (error) {
+        console.error("Error sending mail:", error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Error sending mail."
+        });
+    }
+};
+
+const setDoerPassword = async (req, res) => {
+    try {
+        const { hr_mantra_id, newPassword, confirmPassword } = req.body;
+
+        // Check required fields
+        if (!hr_mantra_id || !newPassword || !confirmPassword) {
+            return res.status(400).json({
+                status: 400,
+                message: "All fields are required."
+            });
+        }
+
+        // Check password match
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({
+                status: 400,
+                message: "Passwords do not match."
+            });
+        }
+
+        const setPassQuery = `
+            UPDATE tbl_login
+            SET password = $1
+            WHERE hr_mantra_id = $2
+        `;
+
+        const result = await db.query(setPassQuery, [
+            confirmPassword,
+            hr_mantra_id
+        ]);
+
+        // Check if row updated
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "User not found."
+            });
+        }
+
+        return res.status(200).json({
+            status: 200,
+            message: "Password updated successfully."
+        });
+
+    } catch (error) {
+        console.error("Error setting password:", error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Error setting password."
+        });
+    }
+};
+
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword}

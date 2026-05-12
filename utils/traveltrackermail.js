@@ -333,4 +333,53 @@ const sendSecondRemarksMail = async (
   }
 };
 
-module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail };
+
+const sendPasswordResetEmail = async (email, hr_mantra_id) => {
+    try {
+        const currentTime = getTimeString();
+        const resetLink = `${process.env.BASE_URL2}resetpassword/${hr_mantra_id}/${currentTime}`;
+
+        const emailSubject = "Password Reset Request for Travel Tracker System";
+
+        // Email Body (HTML format)
+        const emailBody = `
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2>Password Reset Request for Travel Tracker System</h2>
+                <p>Hello,</p>
+                <p>We received a request to reset your password. Click the button below to reset it:</p>
+                <a href="${resetLink}" 
+                style="display: inline-block; padding: 10px 15px; color: white; background-color: #007bff; text-decoration: none; border-radius: 5px;">
+                Reset Password
+                </a>
+                <p>If you didn't request a password reset, you can ignore this email.</p>
+                <p>Thanks,</p>
+                <p>Regards,<br/>Billing System</p>
+            </div>
+        `;
+
+        // Send email using your sendEmail function
+        let emailResponse = await sendEmail({
+            to: email,
+            // to:'dme-3@amrit.co.in',
+            subject: emailSubject,
+            htmlBody: emailBody
+        });
+
+        if (emailResponse.status != 200) {
+            console.error("Email failed:", emailResponse.message);
+            return { status: 500, message: "Email not sent, bill not updated" };
+        }
+
+        return { status: 200, message: "Email sent please check your given mail!" };
+    } catch (error) {
+        console.error("Error sending mail:", error);
+        res.status(500).json({ status: 500, message: "Error sending mail.", });
+    }
+};
+
+const getTimeString=(d)=>{
+  const date=d?new Date(d):new Date();
+  return `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`;
+};
+
+module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail, sendPasswordResetEmail };
