@@ -6,7 +6,7 @@ const generateFormLink = (name, empId) => {
   const now = new Date();
   const endOfMonth = new Date(
     now.getFullYear(),
-    now.getMonth() + 1,
+    now.getMonth() + 2,
     1,
     0, 0, 0
   );

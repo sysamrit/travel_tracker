@@ -1,4 +1,4 @@
-const { sendMailtoHOD, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, sendCoFirstRemarks, sendCoSecondRemarks, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD } = require("./traveltrackerController");
+const { sendMailtoHOD, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, sendCoFirstRemarks, sendCoSecondRemarks, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, sendFirstDayMailtoHOD } = require("./traveltrackerController");
 
 module.exports = [
     // {
@@ -23,8 +23,8 @@ module.exports = [
     // },
     {
         cronTime: '0 6 * * *',
-        jobFunction: sendMailReminder3toHOD,
-        jobName: 'HOD Travel Mail Send Reminder 3',
+        jobFunction: sendFirstDayMailtoHOD,
+        jobName: 'HOD Travel Mail Send First Day',
     },
     // {
     //     cronTime: '0 6 * * *',

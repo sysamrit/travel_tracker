@@ -1,5 +1,5 @@
 const express = require('express');
-const { setTravelDetails, setTravelRemarks, getDestination, getCoPerson, getTravelDetailsDashboard, getCoPersonDetails, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword } = require('../controller/traveltrackerController');
+const { setTravelDetails, setTravelRemarks, getDestination, getCoPerson, getTravelDetailsDashboard, getCoPersonDetails, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword, getTravelFormDetailsbyID } = require('../controller/traveltrackerController');
 
 const travtrack = express.Router();
     
@@ -15,5 +15,6 @@ travtrack.get('/get/single/details/:res_id', getTravelDetailsbyResID);
 travtrack.get('/get/codetails/dashboard/:res_id', getCoPersonDetails);
 travtrack.post('/getid', getIdForChangePassword);
 travtrack.put('/setpassword', setDoerPassword);
+travtrack.get('/details/:traveller_name', getTravelFormDetailsbyID);
 
 module.exports = travtrack;

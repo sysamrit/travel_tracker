@@ -79,6 +79,87 @@ const sendMailtoHOD = async () => {
   }
 };
 
+const sendFirstDayMailtoHOD = async () => {
+  try {
+
+    const query = `
+      SELECT DISTINCT
+             tp.plan_id,
+             tp.hr_mantra_id,
+             e.co_person_id,
+             e.name,
+             e.email
+      FROM tbl_travel_plan tp
+      JOIN tbl_emp e
+        ON tp.hr_mantra_id = e.hr_mantra_id
+      WHERE tp.month_start::date = CURRENT_DATE
+    `;
+
+    const { rows } = await db.query(query);
+
+    if (!rows.length) {
+      console.log('No row present');
+      return;
+    }
+
+    const processedPlanIds = [];
+
+    for (const row of rows) {
+
+      let ccEmails = [];
+
+      if (row.co_person_id && row.co_person_id.trim() !== '') {
+
+        const coPersonIds = row.co_person_id
+          .split(',')
+          .map(id => id.trim());
+
+        const { rows: coPersons } = await db.query(
+          `
+          SELECT coperson_email
+          FROM tbl_coperson
+          WHERE hr_mantra_id = ANY($1)
+          `,
+          [coPersonIds]
+        );
+
+        ccEmails = coPersons.map(p => p.coperson_email);
+      }
+
+      await sendQuaterlyMail(
+        row.name,
+        row.email,
+        row.hr_mantra_id,
+        ccEmails
+      );
+
+      processedPlanIds.push(row.plan_id);
+    }
+
+    console.log("Calling procedure...");
+
+    await db.query(`CALL travel_plan_calculation()`);
+
+    console.log("Procedure completed");
+
+    if (processedPlanIds.length > 0) {
+      await db.query(
+        `
+        UPDATE tbl_travel_plan
+        SET mail_sent = ''
+        WHERE plan_id = ANY($1)
+        `,
+        [processedPlanIds]
+      );
+    }
+
+    console.log('Mail sent successfully');
+
+  } catch (err) {
+    console.error('Error sending mails:', err);
+  }
+};
+
 const sendMailRemindertoHOD = async () => {
   try {
 
@@ -128,7 +209,7 @@ const sendMailReminder2toHOD = async () => {
       await sendQuaterlyReminderMail(row.name, row.email, row.hr_mantra_id);
     }
 
-    await db.query(`CALL travel_plan_calculation()`);
+    // await db.query(`CALL travel_plan_calculation()`);
 
     console.log('Mail sent successfully:');
 
@@ -157,7 +238,7 @@ const sendMailReminder3toHOD = async () => {
       await sendQuaterlyReminderMail(row.name, row.email, row.hr_mantra_id);
     }
 
-    await db.query(`CALL travel_plan_calculation()`);
+    // await db.query(`CALL travel_plan_calculation()`);
 
     console.log('Mail sent successfully:');
 
@@ -166,44 +247,156 @@ const sendMailReminder3toHOD = async () => {
   }
 };
 
+// const setTravelDetails = async (req, res) => {
+//   try {
+//     console.log(req.body);
+//     let { hr_mantra_id, dept, travelDetails } = req.body;
+
+//     const insertTravelQuery = `
+//       INSERT INTO tbl_travel_response
+//       (hr_mantra_id, department, from_date, to_date, destination, coperson_id)
+//       VALUES ($1, $2, $3, $4, $5, $6)
+//       RETURNING res_id, to_date
+//     `;
+
+//     const insertCoPersonQuery = `
+//       INSERT INTO tbl_travel_coperson
+//       (res_id, coperson_id, after_visit_24hr, after_visit_48hr)
+//       VALUES ($1, $2, $3, $4)
+//     `;
+
+//     for (const detail of travelDetails) {
+//       const {
+//         fromDate,
+//         toDate,
+//         destination,
+//         coperson
+//       } = detail;
+
+//       // Convert co-person array → comma-separated string or NULL
+//       const coPersonValue =
+//         Array.isArray(coperson) && coperson.length > 0
+//           ? coperson.join(',')
+//           : null;
+
+//       // Insert travel record
+//       const travelResult = await db.query(insertTravelQuery, [
+//         hr_mantra_id,
+//         dept,
+//         fromDate,
+//         toDate,
+//         destination,
+//         coPersonValue
+//       ]);
+
+//       const { res_id } = travelResult.rows[0];
+
+//       // Calculate follow-up dates
+//       const baseDate = new Date(toDate);
+
+//       const afterVisit24hr = new Date(baseDate);
+//       afterVisit24hr.setDate(afterVisit24hr.getDate() + 1);
+
+//       const afterVisit48hr = new Date(baseDate);
+//       afterVisit48hr.setDate(afterVisit48hr.getDate() + 3);
+
+//       // Insert co-person rows
+//       if (Array.isArray(coperson) && coperson.length > 0) {
+//         await Promise.all(
+//           coperson.map(coperson_id =>
+//             db.query(insertCoPersonQuery, [
+//               res_id,
+//               coperson_id,
+//               afterVisit24hr,
+//               afterVisit48hr
+//             ])
+//           )
+//         );
+//       }
+//     }
+
+//     return res.status(200).json({
+//       status: 200,
+//       message: "Travel details and co-persons inserted successfully"
+//     });
+
+//   } catch (error) {
+//     console.error("Error processing data:", error);
+//     return res.status(500).json({
+//       status: 500,
+//       message: "Internal Server Error"
+//     });
+//   }
+// };
+
 const setTravelDetails = async (req, res) => {
   try {
-    let { hr_mantra_id, dept, travelDetails } = req.body;
+
+    const { hr_mantra_id, dept, travelDetails } = req.body;
 
     const insertTravelQuery = `
       INSERT INTO tbl_travel_response
-      (hr_mantra_id, department, from_date, to_date, destination, coperson_id)
+      (
+        hr_mantra_id,
+        department,
+        from_date,
+        to_date,
+        destination,
+        coperson_id
+      )
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING res_id, to_date
     `;
 
     const insertCoPersonQuery = `
       INSERT INTO tbl_travel_coperson
-      (res_id, coperson_id, after_visit_24hr, after_visit_48hr)
+      (
+        res_id,
+        coperson_id,
+        after_visit_24hrs,
+        after_visit_48hrs
+      )
       VALUES ($1, $2, $3, $4)
+    `;
+
+    const updateTravelFormQuery = `
+      UPDATE tbl_travel_form
+      SET
+        from_date = $1,
+        to_date = $2,
+        travel_companion = $3
+      WHERE form_id = $4
     `;
 
     for (const detail of travelDetails) {
       const {
+        form_id,
+        destination_id,
         fromDate,
         toDate,
-        destination,
         coperson
       } = detail;
 
-      // Convert co-person array → comma-separated string or NULL
       const coPersonValue =
         Array.isArray(coperson) && coperson.length > 0
           ? coperson.join(',')
           : null;
 
-      // Insert travel record
+      // Update tbl_travel_form
+      await db.query(updateTravelFormQuery, [
+        fromDate,
+        toDate,
+        coPersonValue,
+        form_id
+      ]);
+
+      // Insert into tbl_travel_response
       const travelResult = await db.query(insertTravelQuery, [
         hr_mantra_id,
         dept,
         fromDate,
         toDate,
-        destination,
+        destination_id,
         coPersonValue
       ]);
 
@@ -218,10 +411,10 @@ const setTravelDetails = async (req, res) => {
       const afterVisit48hr = new Date(baseDate);
       afterVisit48hr.setDate(afterVisit48hr.getDate() + 3);
 
-      // Insert co-person rows
+      // Insert co-person records
       if (Array.isArray(coperson) && coperson.length > 0) {
         await Promise.all(
-          coperson.map(coperson_id =>
+          coperson.map((coperson_id) =>
             db.query(insertCoPersonQuery, [
               res_id,
               coperson_id,
@@ -235,11 +428,13 @@ const setTravelDetails = async (req, res) => {
 
     return res.status(200).json({
       status: 200,
-      message: "Travel details and co-persons inserted successfully"
+      message:
+        "Travel form updated and travel response records inserted successfully"
     });
 
   } catch (error) {
-    console.error("Error processing data:", error);
+    console.error("Error processing travel details:", error);
+
     return res.status(500).json({
       status: 500,
       message: "Internal Server Error"
@@ -1365,4 +1560,47 @@ const setDoerPassword = async (req, res) => {
     }
 };
 
-module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword}
+const getTravelFormDetailsbyID = async (req, res) => {
+    try {
+
+        const { traveller_name } = req.params;
+
+        const currentMonth = new Date().toLocaleString('en-US', {
+            month: 'long'
+        });
+
+        const query = `
+            SELECT
+                tf.*,
+                l.name,
+                a.area_name
+            FROM tbl_travel_form tf
+            LEFT JOIN tbl_login l
+                ON tf.traveller_name = l.hr_mantra_id
+            LEFT JOIN tbl_area a
+                ON tf.destination_id = a.area_code
+            WHERE tf.traveller_name = $1
+            AND tf.month_name = $2
+        `;
+
+        const result = await db.query(query, [
+            traveller_name,
+            currentMonth
+        ]);
+
+        return res.status(200).json({
+            status: 200,
+            data: result.rows
+        });
+
+    } catch (error) {
+        console.error("Error fetching travel details:", error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Error fetching travel details."
+        });
+    }
+};
+
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword, getTravelFormDetailsbyID, sendFirstDayMailtoHOD}
