@@ -1593,22 +1593,15 @@ const getTravelFormDetailsbyID = async (req, res) => {
         const result = await db.query(query, [
             traveller_name,
             monthName
-            monthName
         ]);
 
         return res.status(200).json({
             status: 200,
             month: monthName,
-            month: monthName,
             data: result.rows
         });
 
     } catch (error) {
-
-        console.error(
-            "Error fetching travel details:",
-            error
-        );
 
         console.error(
             "Error fetching travel details:",
