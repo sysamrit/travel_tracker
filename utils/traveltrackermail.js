@@ -1,3 +1,5 @@
+const moment = require("moment");
+const { db } = require("../db/db");
 const { sendEmail } = require("./emailService");
 
 const generateFormLink = (name, empId) => {
@@ -382,4 +384,150 @@ const getTimeString=(d)=>{
   return `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`;
 };
 
-module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail, sendPasswordResetEmail };
+const sendMailLinktoPrapti = async () => {
+    try {
+        const query = `
+            SELECT 
+                tr.res_id,
+                tr.hr_mantra_id,
+                tr.from_date,
+                tr.to_date,
+                emp.name
+            FROM tbl_travel_response tr
+            LEFT JOIN tbl_emp emp
+                ON emp.hr_mantra_id = tr.hr_mantra_id
+            WHERE tr.after_visit_48hr::date = (CURRENT_DATE - 1)
+            AND tr.is_visited IS NULL
+        `;
+
+        const result = await db.query(query);
+        const travelData = result.rows;
+
+        if (!travelData.length) {
+            console.log("No pending remarks found.");
+            return {
+                status: 200,
+                message: "No pending remarks found."
+            };
+        }
+
+        const formatDate = (date) => {
+            const d = new Date(date);
+
+            const day = String(d.getDate()).padStart(2, "0");
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const year = d.getFullYear();
+
+            return `${day}-${month}-${year}`;
+        };
+
+        let mailRows = "";
+
+        for (const item of travelData) {
+            const {
+                res_id,
+                hr_mantra_id,
+                from_date,
+                to_date,
+                name
+            } = item;
+
+            const { formUrl } =
+                generateFormOtherLinkforRemarks2Month(
+                    name || "",
+                    hr_mantra_id,
+                    res_id
+                );
+
+            mailRows += `
+                <tr>
+                    <td>${name || "-"}</td>
+                    <td>${hr_mantra_id}</td>
+                    <td>${formatDate(from_date)}</td>
+                    <td>${formatDate(to_date)}</td>
+                    <td>
+                        <a href="${formUrl}" target="_blank">
+                            Open Remarks Form
+                        </a>
+                    </td>
+                </tr>
+            `;
+        }
+
+        const html = `
+        <div>
+            <p>Dear Prapti Mam,</p>
+
+            <p>
+                The following employees have not submitted their visited form after 48 hrs of reminder:
+            </p>
+
+            <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Employee ID</th>
+                        <th>From Date</th>
+                        <th>To Date</th>
+                        <th>Remarks Link</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${mailRows}
+                </tbody>
+            </table>
+
+            <br/>
+            <p>Regards,</p>
+            <p>System Generated Mail</p>
+        </div>
+        `;
+
+        await sendEmail({
+            to: process.env.PRAPTI_MAIL,
+            subject: "Pending Travel Remarks Submission",
+            htmlBody: html
+        });
+
+        console.log("Mail sent successfully.");
+
+        return {
+            status: 200,
+            message: "Mail sent successfully."
+        };
+
+    } catch (error) {
+        console.error("Error sending mail:", error);
+
+        return {
+            status: 500,
+            message: "Error sending mail.",
+            error: error.message
+        };
+    }
+};
+
+const generateFormOtherLinkforRemarks2Month = (name, empId, res_id) => {
+    const baseUrl = `${process.env.BASE_URL2.replace(/\/+$/, '')}/travel_remarks_form`;
+
+    // Current IST
+    const nowUTC = new Date();
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(nowUTC.getTime() + IST_OFFSET);
+
+    // Add 2 months
+    const expiresDate = new Date(nowIST);
+    expiresDate.setMonth(expiresDate.getMonth() + 2);
+
+    // Set time to 00:00:00
+    expiresDate.setHours(0, 0, 0, 0);
+
+    const expiresISO = expiresDate.toISOString();
+
+    return {
+        formUrl: `${baseUrl}/${encodeURIComponent(name)}/${empId}/${res_id}/${encodeURIComponent(expiresISO)}`,
+        expires: expiresISO
+    };
+};
+
+module.exports = { sendQuaterlyMail, sendTenReminderMail, sendSixReminderMail, sendTwoReminderMail, sendFirstRemarksMail, sendSecondRemarksMail, sendQuaterlyReminderMail, sendPasswordResetEmail, sendMailLinktoPrapti };

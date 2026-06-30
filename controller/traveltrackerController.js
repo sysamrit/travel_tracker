@@ -331,7 +331,7 @@ const sendMailReminder3toHOD = async () => {
 
 const setTravelDetails = async (req, res) => {
   try {
-
+    console.log(req.body);
     const { hr_mantra_id, dept, travelDetails } = req.body;
 
     const insertTravelQuery = `
@@ -1565,7 +1565,14 @@ const getTravelFormDetailsbyID = async (req, res) => {
 
         const { traveller_name } = req.params;
 
-        const currentMonth = new Date().toLocaleString('en-US', {
+        const date = new Date();
+
+        // If today is not the first day, move to next month
+        if (date.getDate() > 20) {
+            date.setMonth(date.getMonth() + 1);
+        }
+
+        const monthName = date.toLocaleString('en-US', {
             month: 'long'
         });
 
@@ -1585,16 +1592,21 @@ const getTravelFormDetailsbyID = async (req, res) => {
 
         const result = await db.query(query, [
             traveller_name,
-            currentMonth
+            monthName
         ]);
 
         return res.status(200).json({
             status: 200,
+            month: monthName,
             data: result.rows
         });
 
     } catch (error) {
-        console.error("Error fetching travel details:", error);
+
+        console.error(
+            "Error fetching travel details:",
+            error
+        );
 
         return res.status(500).json({
             status: 500,
@@ -1603,4 +1615,216 @@ const getTravelFormDetailsbyID = async (req, res) => {
     }
 };
 
-module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword, getTravelFormDetailsbyID, sendFirstDayMailtoHOD}
+const getTravelLocation = async (req, res) => {
+    try {
+        let { hr_mantra_id, month } = req.params;
+
+        // If month not provided -> use current month
+        if (!month) {
+            month = new Date().toISOString().slice(0, 7);
+        }
+
+        month = month.trim();
+
+        let params = [hr_mantra_id];
+
+        params.push(`${month}-01`);
+        const dateIndex = params.length;
+
+        const monthFilter = `
+            AND tf.from_date >= $${dateIndex}::date
+            AND tf.from_date < ($${dateIndex}::date + INTERVAL '1 month')
+        `;
+
+        const areaQuery = `
+            SELECT
+                a.area_name,
+                COUNT(tf.destination) AS count
+            FROM tbl_area a
+            LEFT JOIN tbl_travel_response tf
+                ON a.area_code = tf.destination
+                AND tf.hr_mantra_id = $1
+                ${monthFilter}
+            GROUP BY a.area_code, a.area_name
+            ORDER BY a.area_name
+        `;
+
+        const totalQuery = `
+            SELECT COUNT(area_code) AS total_count
+            FROM tbl_area
+        `;
+
+        const visitedQuery = `
+            SELECT
+                COUNT(DISTINCT tf.destination) AS visited
+            FROM tbl_travel_response tf
+            WHERE tf.hr_mantra_id = $1
+            AND tf.destination IS NOT NULL
+            ${monthFilter}
+        `;
+
+        const topDestinationQuery = `
+            SELECT
+                a.area_name,
+                COUNT(tf.destination) AS visit_count
+            FROM tbl_travel_response tf
+            INNER JOIN tbl_area a
+                ON a.area_code = tf.destination
+            WHERE tf.hr_mantra_id = $1
+            AND tf.destination IS NOT NULL
+            ${monthFilter}
+            GROUP BY a.area_code, a.area_name
+            ORDER BY visit_count DESC
+            LIMIT 1
+        `;
+
+        console.log("month:", month);
+        console.log("params:", params);
+
+        const areaResult = await db.query(areaQuery, params);
+        const totalResult = await db.query(totalQuery);
+        const visitedResult = await db.query(visitedQuery, params);
+        const topDestinationResult = await db.query(
+            topDestinationQuery,
+            params
+        );
+
+        return res.status(200).json({
+            status: 200,
+            total_count: parseInt(totalResult.rows[0]?.total_count || 0),
+            visited: parseInt(visitedResult.rows[0]?.visited || 0),
+            not_visited:
+                parseInt(totalResult.rows[0]?.total_count || 0) -
+                parseInt(visitedResult.rows[0]?.visited || 0),
+
+            most_visited_location: {
+                area_name: topDestinationResult.rows[0]?.area_name || null,
+                count: parseInt(
+                    topDestinationResult.rows[0]?.visit_count || 0
+                )
+            },
+
+            data: areaResult.rows
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Error fetching travel details"
+        });
+    }
+};
+
+const getResponseCount = async (req, res) => {
+    try {
+
+        const { hr_mantra_id } = req.params;
+
+        const query = `
+        SELECT
+            TO_CHAR(
+                months.month,
+                'Mon YYYY'
+            ) AS month,
+
+            COALESCE(
+                COUNT(
+                    tr.from_date
+                )::INT,
+                0
+            ) AS count
+
+        FROM (
+
+            SELECT
+                generate_series(
+                    DATE_TRUNC(
+                        'month',
+                        CURRENT_DATE
+                    ) - INTERVAL '6 months',
+
+                    DATE_TRUNC(
+                        'month',
+                        CURRENT_DATE
+                    ),
+
+                    INTERVAL '1 month'
+                ) AS month
+
+        ) months
+
+        LEFT JOIN
+        tbl_travel_response tr
+
+        ON DATE_TRUNC(
+            'month',
+            tr.from_date
+        ) = months.month
+
+        AND tr.hr_mantra_id = $1
+
+        GROUP BY
+            months.month
+
+        ORDER BY
+            months.month ASC
+        `;
+
+        const result =
+        await db.query(
+            query,
+            [hr_mantra_id]
+        );
+
+        return res.status(200).json({
+            status: 200,
+            data: result.rows
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Error fetching response count:",
+            error
+        );
+
+        return res.status(500).json({
+            status: 500,
+            message:
+            "Error fetching response count"
+        });
+
+    }
+};
+
+const getEmployee = async (req, res) => {
+    try {
+
+        const query = `
+            SELECT 
+                hr_mantra_id,
+                name
+            FROM tbl_emp
+            ORDER BY name ASC
+        `;
+
+        const result = await db.query(query);
+
+        return res.status(200).json({
+            status: 200,
+            data: result.rows
+        });
+
+    } catch (error) {
+        console.error("Error fetching employee details:", error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Error fetching employee details."
+        });
+    }
+};
+
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword, getTravelFormDetailsbyID, sendFirstDayMailtoHOD, getTravelLocation, getEmployee, getResponseCount}
