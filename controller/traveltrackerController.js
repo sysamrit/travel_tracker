@@ -1619,21 +1619,48 @@ const getTravelLocation = async (req, res) => {
     try {
         let { hr_mantra_id, month } = req.params;
 
-        // If month not provided -> use current month
+        // If month not provided -> current month
         if (!month) {
             month = new Date().toISOString().slice(0, 7);
-        }
+        } else {
+            month = month.trim();
 
-        month = month.trim();
+            // If month already in YYYY-MM format
+            const yyyyMmRegex = /^\d{4}-\d{2}$/;
+
+            if (!yyyyMmRegex.test(month)) {
+                // Convert month name (June / Jun) → YYYY-MM
+                const currentYear = new Date().getFullYear();
+
+                const parsedDate = new Date(`${month} 1, ${currentYear}`);
+
+                if (isNaN(parsedDate.getTime())) {
+                    return res.status(400).json({
+                        status: 400,
+                        message:
+                            "Invalid month. Use YYYY-MM or month name (e.g. June)"
+                    });
+                }
+
+                const monthNumber = String(
+                    parsedDate.getMonth() + 1
+                ).padStart(2, "0");
+
+                month = `${currentYear}-${monthNumber}`;
+            }
+        }
 
         let params = [hr_mantra_id];
 
+        // Converts YYYY-MM → YYYY-MM-01
         params.push(`${month}-01`);
         const dateIndex = params.length;
 
         const monthFilter = `
             AND tf.from_date >= $${dateIndex}::date
-            AND tf.from_date < ($${dateIndex}::date + INTERVAL '1 month')
+            AND tf.from_date < (
+                $${dateIndex}::date + INTERVAL '1 month'
+            )
         `;
 
         const areaQuery = `
@@ -1678,27 +1705,44 @@ const getTravelLocation = async (req, res) => {
             LIMIT 1
         `;
 
-        console.log("month:", month);
+        console.log("formatted month:", month);
         console.log("params:", params);
 
         const areaResult = await db.query(areaQuery, params);
+
         const totalResult = await db.query(totalQuery);
-        const visitedResult = await db.query(visitedQuery, params);
+
+        const visitedResult = await db.query(
+            visitedQuery,
+            params
+        );
+
         const topDestinationResult = await db.query(
             topDestinationQuery,
             params
         );
 
+        const totalCount = parseInt(
+            totalResult.rows[0]?.total_count || 0
+        );
+
+        const visitedCount = parseInt(
+            visitedResult.rows[0]?.visited || 0
+        );
+
         return res.status(200).json({
             status: 200,
-            total_count: parseInt(totalResult.rows[0]?.total_count || 0),
-            visited: parseInt(visitedResult.rows[0]?.visited || 0),
-            not_visited:
-                parseInt(totalResult.rows[0]?.total_count || 0) -
-                parseInt(visitedResult.rows[0]?.visited || 0),
+
+            total_count: totalCount,
+
+            visited: visitedCount,
+
+            not_visited: totalCount - visitedCount,
 
             most_visited_location: {
-                area_name: topDestinationResult.rows[0]?.area_name || null,
+                area_name:
+                    topDestinationResult.rows[0]?.area_name || null,
+
                 count: parseInt(
                     topDestinationResult.rows[0]?.visit_count || 0
                 )
@@ -1708,11 +1752,12 @@ const getTravelLocation = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Travel location error:", error);
 
         return res.status(500).json({
             status: 500,
-            message: "Error fetching travel details"
+            message: "Error fetching travel details",
+            error: error.message
         });
     }
 };
@@ -1743,7 +1788,7 @@ const getResponseCount = async (req, res) => {
                     DATE_TRUNC(
                         'month',
                         CURRENT_DATE
-                    ) - INTERVAL '6 months',
+                    ) - INTERVAL '11 months',
 
                     DATE_TRUNC(
                         'month',
@@ -1827,4 +1872,202 @@ const getEmployee = async (req, res) => {
     }
 };
 
-module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword, getTravelFormDetailsbyID, sendFirstDayMailtoHOD, getTravelLocation, getEmployee, getResponseCount}
+const getEmployeeDetailsbyID = async (req, res) => {
+    try {
+        const { res_id } = req.params;
+
+        if (!res_id) {
+            return res.status(400).json({
+                status: 400,
+                message: "res_id is required"
+            });
+        }
+
+        const query = `
+            SELECT 
+                tr.department,
+                tr.from_date,
+                tr.to_date,
+                am.area_name AS destination
+            FROM tbl_travel_response tr
+            LEFT JOIN tbl_area am
+                ON tr.destination = am.area_code
+            WHERE tr.res_id = $1
+        `;
+
+        const result = await db.query(query, [res_id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                status: 404,
+                message: "Employee details not found"
+            });
+        }
+
+        return res.status(200).json({
+            status: 200,
+            message: "Employee details fetched successfully",
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error("Error fetching employee details:", error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Error fetching employee details."
+        });
+    }
+};
+
+const getTravelLocationYearly = async (req, res) => {
+    try {
+        let { hr_mantra_id, year } = req.params;
+
+        // If no year -> use current year
+        if (!year) {
+            year = new Date().getFullYear();
+        }
+
+        year = parseInt(year);
+
+        if (isNaN(year)) {
+            return res.status(400).json({
+                status: 400,
+                message: "Invalid year"
+            });
+        }
+
+        // Financial year start and end
+        const financialYearStart = `${year}-04-01`;
+        const financialYearEnd = `${year + 1}-04-01`;
+
+        let params = [
+            hr_mantra_id,
+            financialYearStart
+        ];
+
+        const startIndex = 2;
+
+        params.push(financialYearEnd);
+        const endIndex = 3;
+
+        const yearFilter = `
+            AND tf.from_date >= $${startIndex}::date
+            AND tf.from_date < $${endIndex}::date
+        `;
+
+        const areaQuery = `
+            SELECT
+                a.area_name,
+                COUNT(tf.destination) AS count
+            FROM tbl_area a
+            LEFT JOIN tbl_travel_response tf
+                ON a.area_code = tf.destination
+                AND tf.hr_mantra_id = $1
+                ${yearFilter}
+            GROUP BY a.area_code, a.area_name
+            ORDER BY a.area_name
+        `;
+
+        const totalQuery = `
+            SELECT COUNT(area_code) AS total_count
+            FROM tbl_area
+        `;
+
+        const visitedQuery = `
+            SELECT
+                COUNT(DISTINCT tf.destination) AS visited
+            FROM tbl_travel_response tf
+            WHERE tf.hr_mantra_id = $1
+            AND tf.destination IS NOT NULL
+            ${yearFilter}
+        `;
+
+        const topDestinationQuery = `
+            SELECT
+                a.area_name,
+                COUNT(tf.destination) AS visit_count
+            FROM tbl_travel_response tf
+            INNER JOIN tbl_area a
+                ON a.area_code = tf.destination
+            WHERE tf.hr_mantra_id = $1
+            AND tf.destination IS NOT NULL
+            ${yearFilter}
+            GROUP BY a.area_code, a.area_name
+            ORDER BY visit_count DESC
+            LIMIT 1
+        `;
+
+        console.log("Financial Year:", `${year}-${year + 1}`);
+        console.log("Params:", params);
+
+        const areaResult = await db.query(
+            areaQuery,
+            params
+        );
+
+        const totalResult = await db.query(
+            totalQuery
+        );
+
+        const visitedResult = await db.query(
+            visitedQuery,
+            params
+        );
+
+        const topDestinationResult = await db.query(
+            topDestinationQuery,
+            params
+        );
+
+        const totalCount = parseInt(
+            totalResult.rows[0]?.total_count || 0
+        );
+
+        const visitedCount = parseInt(
+            visitedResult.rows[0]?.visited || 0
+        );
+
+        return res.status(200).json({
+            status: 200,
+
+            financial_year: `${year}-${year + 1}`,
+
+            total_count: totalCount,
+
+            visited: visitedCount,
+
+            not_visited:
+                totalCount - visitedCount,
+
+            most_visited_location: {
+                area_name:
+                    topDestinationResult.rows[0]
+                        ?.area_name || null,
+
+                count: parseInt(
+                    topDestinationResult.rows[0]
+                        ?.visit_count || 0
+                )
+            },
+
+            data: areaResult.rows
+        });
+
+    } catch (error) {
+        console.error(
+            "Travel yearly error:",
+            error
+        );
+
+        return res.status(500).json({
+            status: 500,
+            message:
+                "Error fetching yearly travel details",
+            error: error.message
+        });
+    }
+};
+
+module.exports = {sendMailtoHOD, setTravelDetails, sendTenDaysReminder, sendSixDaysReminder, sendTwoDaysReminder, sendFirstRemarks, sendSecondRemarks, setTravelRemarks, getDestination, getCoPerson, sendCoFirstRemarks, sendCoSecondRemarks, getTravelDetailsDashboard, getCoPersonDetails, sendMailRemindertoHOD, sendMailReminder2toHOD, sendMailReminder3toHOD, setLogin, getTravelDashboardbyID, getTravelDetailsbyResID, setTravelDetailsbyResID, getIdForChangePassword, setDoerPassword, getTravelFormDetailsbyID, sendFirstDayMailtoHOD, getTravelLocation, getEmployee, getResponseCount, getEmployeeDetailsbyID, getTravelLocationYearly}
